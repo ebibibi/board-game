@@ -184,7 +184,7 @@
     </div>
     <div id="speed-control">
         <label>速度:</label>
-        <input type="range" id="speed" min="1" max="5" value="3">
+        <input type="range" id="speed" min="1" max="5" value="2">
         <span id="speed-label">x1.0</span>
     </div>
 
@@ -204,7 +204,7 @@
 
 <script>
 // ============================================================
-// Fortress Clash — Responsive Browser Board Game
+// Fortress Clash — Smooth Animation Browser Board Game
 // ============================================================
 
 var canvas = document.getElementById('canvas');
@@ -212,7 +212,7 @@ var ctx = canvas.getContext('2d');
 
 var COLS = 10;
 var ROWS = 8;
-var CELL = 64; // internal resolution cell size
+var CELL = 64;
 var CANVAS_W = COLS * CELL;
 var CANVAS_H = ROWS * CELL;
 canvas.width = CANVAS_W;
@@ -230,7 +230,6 @@ var UNIT_TYPES = {
 var MAX_UNITS = 5;
 var FORTRESS_HP = 20;
 
-// Fortresses at center of each side
 var FORTRESS_P1 = { x: 0, y: 4 };
 var FORTRESS_P2 = { x: 9, y: 3 };
 
@@ -245,9 +244,12 @@ var fortresses = {
 };
 var placedCount = { 1: 0, 2: 0 };
 var battleTimer = null;
-var tickInterval = 300;
+var tickInterval = 1200; // slower base speed
 var tickCount = 0;
 var countdownValue = 0;
+
+// Animation: lerp speed (0-1 per frame, smaller = smoother)
+var LERP_SPEED = 0.08;
 
 // ---- Helpers ----
 function getUnit(x, y) {
@@ -269,7 +271,6 @@ function isPlacementZone(x, y, player) {
     return x >= 7 && x <= 9;
 }
 
-// Convert screen coordinates to grid coordinates (handles CSS scaling)
 function screenToGrid(clientX, clientY) {
     var rect = canvas.getBoundingClientRect();
     var scaleX = CANVAS_W / rect.width;
@@ -277,6 +278,10 @@ function screenToGrid(clientX, clientY) {
     var x = Math.floor((clientX - rect.left) * scaleX / CELL);
     var y = Math.floor((clientY - rect.top) * scaleY / CELL);
     return { x: x, y: y };
+}
+
+function lerp(a, b, t) {
+    return a + (b - a) * t;
 }
 
 // ---- Drawing ----
@@ -306,7 +311,6 @@ function drawGrid() {
         }
     }
 
-    // Center divider
     ctx.strokeStyle = '#444';
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
@@ -367,14 +371,15 @@ function drawUnits() {
         var u = units[i];
         if (u.hp <= 0) continue;
 
-        // During placement, only show current player's units
         if (phase === 'place_p1' && u.player !== P1) continue;
         if (phase === 'place_p2' && u.player !== P2) continue;
 
-        var px = u.x * CELL + CELL / 2;
-        var py = u.y * CELL + CELL / 2;
+        // Use visual position (smoothly interpolated)
+        var px = u.vx * CELL + CELL / 2;
+        var py = u.vy * CELL + CELL / 2;
         var type = UNIT_TYPES[u.type];
 
+        // Team color circle
         ctx.fillStyle = u.player === P1 ? 'rgba(68,136,255,0.3)' : 'rgba(255,68,68,0.3)';
         ctx.beginPath();
         ctx.arc(px, py, CELL * 0.38, 0, Math.PI * 2);
@@ -385,11 +390,19 @@ function drawUnits() {
         ctx.stroke();
         ctx.lineWidth = 1;
 
+        // Emoji with slight bob animation during movement
+        var isMoving = (Math.abs(u.vx - u.x) > 0.05 || Math.abs(u.vy - u.y) > 0.05);
+        var bobOffset = 0;
+        if (isMoving) {
+            bobOffset = Math.sin(Date.now() / 120) * 2;
+        }
+
         ctx.font = '22px serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(type.emoji, px, py - 2);
+        ctx.fillText(type.emoji, px, py - 2 + bobOffset);
 
+        // HP bar
         var bw = CELL * 0.6;
         var bx = px - bw / 2;
         var by = py + CELL * 0.3;
@@ -399,13 +412,75 @@ function drawUnits() {
         ctx.fillStyle = hpRatio > 0.5 ? '#44cc44' : hpRatio > 0.25 ? '#ccaa00' : '#ff4444';
         ctx.fillRect(bx, by, bw * hpRatio, 4);
 
+        // Attack flash
         if (u.flashTimer > 0) {
-            ctx.fillStyle = 'rgba(255,255,100,' + (u.flashTimer * 0.15) + ')';
+            ctx.fillStyle = 'rgba(255,255,100,' + (u.flashTimer * 0.06) + ')';
             ctx.beginPath();
-            ctx.arc(px, py, CELL * 0.42, 0, Math.PI * 2);
+            ctx.arc(px, py, CELL * 0.45, 0, Math.PI * 2);
             ctx.fill();
-            u.flashTimer--;
         }
+
+        // Damage number popup
+        if (u.damagePopup > 0 && u.lastDamage > 0) {
+            var popAlpha = Math.min(1, u.damagePopup / 15);
+            var popY = py - CELL * 0.4 - (30 - u.damagePopup);
+            ctx.font = 'bold 14px sans-serif';
+            ctx.fillStyle = 'rgba(255,80,80,' + popAlpha + ')';
+            ctx.fillText('-' + u.lastDamage, px, popY);
+        }
+    }
+}
+
+// ---- Animation Loop (runs every frame) ----
+var animRunning = false;
+
+function startAnimLoop() {
+    if (animRunning) return;
+    animRunning = true;
+    requestAnimationFrame(animFrame);
+}
+
+function animFrame() {
+    if (!animRunning) return;
+
+    // Interpolate visual positions toward logical positions
+    var anyMoving = false;
+    for (var i = 0; i < units.length; i++) {
+        var u = units[i];
+        if (u.hp <= 0) continue;
+
+        var dx = u.x - u.vx;
+        var dy = u.y - u.vy;
+
+        if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) {
+            u.vx = lerp(u.vx, u.x, LERP_SPEED);
+            u.vy = lerp(u.vy, u.y, LERP_SPEED);
+            anyMoving = true;
+        } else {
+            u.vx = u.x;
+            u.vy = u.y;
+        }
+
+        // Decay flash timer
+        if (u.flashTimer > 0) {
+            u.flashTimer -= 0.5;
+            anyMoving = true;
+        }
+
+        // Decay damage popup
+        if (u.damagePopup > 0) {
+            u.damagePopup -= 0.5;
+            anyMoving = true;
+        }
+    }
+
+    draw();
+
+    // Keep running if in battle or something is still animating
+    if (phase === 'battle' || phase === 'countdown' || anyMoving) {
+        requestAnimationFrame(animFrame);
+    } else {
+        animRunning = false;
     }
 }
 
@@ -498,7 +573,7 @@ function updateStatus() {
     }
 }
 
-// ---- Placement (mouse + touch) ----
+// ---- Placement ----
 function handlePlace(clientX, clientY) {
     var pos = screenToGrid(clientX, clientY);
     var x = pos.x;
@@ -506,7 +581,6 @@ function handlePlace(clientX, clientY) {
 
     if (phase !== 'place_p1' && phase !== 'place_p2') return;
 
-    // If tapping on own unit, remove it
     var existingUnit = getUnit(x, y);
     if (existingUnit && existingUnit.player === currentPlayer) {
         for (var i = units.length - 1; i >= 0; i--) {
@@ -529,9 +603,12 @@ function handlePlace(clientX, clientY) {
         player: currentPlayer,
         type: selectedType,
         x: x, y: y,
+        vx: x, vy: y, // visual position starts at logical position
         hp: UNIT_TYPES[selectedType].hp,
         cooldown: 0,
         flashTimer: 0,
+        damagePopup: 0,
+        lastDamage: 0,
     });
     placedCount[currentPlayer]++;
     buildUI();
@@ -589,6 +666,7 @@ function startCountdown() {
     countdownValue = 3;
     updateStatus();
     draw();
+    startAnimLoop();
 
     var countdownTimer = setInterval(function() {
         countdownValue--;
@@ -604,8 +682,8 @@ function startCountdown() {
 // ---- Speed ----
 document.getElementById('speed').addEventListener('input', function(e) {
     var v = parseInt(e.target.value);
-    var speeds = { 1: 600, 2: 400, 3: 300, 4: 150, 5: 80 };
-    var labels = { 1: 'x0.5', 2: 'x0.75', 3: 'x1.0', 4: 'x2.0', 5: 'x4.0' };
+    var speeds = { 1: 2000, 2: 1200, 3: 800, 4: 500, 5: 300 };
+    var labels = { 1: 'x0.5', 2: 'x1.0', 3: 'x1.5', 4: 'x2.5', 5: 'x4.0' };
     tickInterval = speeds[v];
     document.getElementById('speed-label').textContent = labels[v];
     if (battleTimer) {
@@ -621,6 +699,7 @@ function startBattle() {
     buildUI();
     updateStatus();
     draw();
+    startAnimLoop();
     battleTimer = setInterval(battleTick, tickInterval);
 }
 
@@ -659,15 +738,23 @@ function battleTick() {
         if (!target) continue;
 
         if (targetDist <= type.range) {
+            // Attack — just update logical state, visual follows via lerp
             target.hp -= type.atk;
             u.cooldown = Math.max(1, 3 - type.speed);
-            u.flashTimer = 3;
+            u.flashTimer = 20;
+
+            // Show damage popup on target
+            if (target.damagePopup !== undefined) {
+                target.damagePopup = 30;
+                target.lastDamage = type.atk;
+            }
 
             if (target.hp <= 0 && targetIsFortress) {
                 endGame(u.player);
                 return;
             }
         } else {
+            // Move — update logical position, visual will lerp
             var dx = Math.sign(target.x - u.x);
             var dy = Math.sign(target.y - u.y);
 
@@ -710,6 +797,7 @@ function battleTick() {
         }
     }
 
+    // Remove dead units
     var alive = [];
     for (var i = 0; i < units.length; i++) {
         if (units[i].hp > 0) alive.push(units[i]);
@@ -730,7 +818,6 @@ function battleTick() {
     }
 
     updateStatus();
-    draw();
 }
 
 function endGame(winner) {
@@ -762,6 +849,7 @@ document.getElementById('btn-reset').addEventListener('click', resetGame);
 function resetGame() {
     clearInterval(battleTimer);
     battleTimer = null;
+    animRunning = false;
     phase = 'place_p1';
     currentPlayer = P1;
     selectedType = 'warrior';
