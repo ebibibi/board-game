@@ -6,176 +6,83 @@
     <title>Fortress Clash — オリジナルボードゲーム</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-
         body {
-            background: #0f0f1a;
-            color: #eee;
-            font-family: 'Segoe UI', sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-            overflow-x: hidden;
-            padding: 8px;
+            background: #0f0f1a; color: #eee; font-family: 'Segoe UI', sans-serif;
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; overflow-x: hidden; padding: 8px;
         }
-
-        h1 {
-            margin: 8px 0 2px;
-            font-size: 1.3rem;
-            letter-spacing: 2px;
-        }
-
-        #status {
-            font-size: 0.9rem;
-            margin-bottom: 6px;
-            color: #aaa;
-            min-height: 1.2em;
-            text-align: center;
-        }
-
-        #board-container {
-            width: 100%;
-            max-width: 640px;
-            position: relative;
-        }
-
-        canvas {
-            width: 100%;
-            height: auto;
-            border: 2px solid #333;
-            border-radius: 8px;
-            cursor: pointer;
-            display: block;
-            touch-action: none;
-        }
-
-        #ui {
-            display: flex;
-            gap: 8px;
-            margin: 8px 0;
-            flex-wrap: wrap;
-            justify-content: center;
-            max-width: 640px;
-        }
-
+        h1 { margin: 8px 0 2px; font-size: 1.3rem; letter-spacing: 2px; }
+        #status { font-size: 0.9rem; margin-bottom: 6px; color: #aaa; min-height: 1.2em; text-align: center; }
+        #board-container { width: 100%; max-width: 800px; position: relative; }
+        canvas { width: 100%; height: auto; border: 2px solid #333; border-radius: 8px; cursor: pointer; display: block; touch-action: none; }
+        #ui { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; justify-content: center; max-width: 800px; }
         .unit-btn {
-            padding: 8px 12px;
-            border: 2px solid #555;
-            border-radius: 8px;
-            background: #1a1a2e;
-            color: #eee;
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: all 0.15s;
-            user-select: none;
+            padding: 8px 12px; border: 2px solid #555; border-radius: 8px;
+            background: #1a1a2e; color: #eee; font-size: 0.85rem;
+            cursor: pointer; transition: all 0.15s; user-select: none;
             -webkit-tap-highlight-color: transparent;
         }
         .unit-btn:hover { border-color: #888; background: #252540; }
         .unit-btn.selected { border-color: #ffcc00; background: #2a2a45; }
-
         .action-btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            font-size: 0.95rem;
-            cursor: pointer;
-            font-weight: bold;
-            transition: all 0.15s;
+            padding: 10px 20px; border: none; border-radius: 8px; font-size: 0.95rem;
+            cursor: pointer; font-weight: bold; transition: all 0.15s;
             -webkit-tap-highlight-color: transparent;
         }
         .action-btn:hover { filter: brightness(1.2); }
         .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
         #btn-ready { background: #22aa44; color: #fff; }
         #btn-reset { background: #555; color: #fff; }
-
-        #controls {
-            display: flex;
-            gap: 12px;
-            margin: 6px 0 12px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-
-        #info {
-            display: flex;
-            gap: 16px;
-            font-size: 0.85rem;
-            margin-bottom: 6px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
+        #controls { display: flex; gap: 12px; margin: 6px 0 12px; flex-wrap: wrap; justify-content: center; }
+        #info { display: flex; gap: 16px; font-size: 0.85rem; margin-bottom: 6px; flex-wrap: wrap; justify-content: center; }
         .player-info { padding: 4px 12px; border-radius: 6px; }
-        .p1-info { background: rgba(68, 136, 255, 0.2); border: 1px solid #4488ff; }
-        .p2-info { background: rgba(255, 68, 68, 0.2); border: 1px solid #ff4444; }
-
-        #speed-control {
-            display: none;
-            align-items: center;
-            gap: 8px;
-            margin: 4px 0;
-            font-size: 0.85rem;
-            color: #aaa;
-        }
+        .p1-info { background: rgba(68,136,255,0.2); border: 1px solid #4488ff; }
+        .p2-info { background: rgba(255,68,68,0.2); border: 1px solid #ff4444; }
+        #speed-control { display: none; align-items: center; gap: 8px; margin: 4px 0; font-size: 0.85rem; color: #aaa; }
         #speed-control input { width: 100px; }
-
         #handover-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: #0f0f1a;
-            justify-content: center;
-            align-items: center;
-            z-index: 90;
-            flex-direction: column;
-            gap: 20px;
-            padding: 20px;
-            text-align: center;
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: #0f0f1a; justify-content: center; align-items: center;
+            z-index: 90; flex-direction: column; gap: 20px; padding: 20px; text-align: center;
         }
         #handover-overlay h2 { font-size: 1.6rem; }
         #handover-overlay p { font-size: 1rem; color: #aaa; }
-
         #result-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.7);
-            justify-content: center;
-            align-items: center;
-            z-index: 100;
-            padding: 20px;
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7); justify-content: center; align-items: center;
+            z-index: 100; padding: 20px;
         }
-        #result-box {
-            background: #1a1a2e;
-            border: 2px solid #ffcc00;
-            border-radius: 16px;
-            padding: 30px 40px;
-            text-align: center;
-        }
+        #result-box { background: #1a1a2e; border: 2px solid #ffcc00; border-radius: 16px; padding: 30px 40px; text-align: center; }
         #result-box h2 { font-size: 1.6rem; margin-bottom: 12px; }
         #result-box p { font-size: 1rem; color: #aaa; margin-bottom: 20px; }
-
-        #remove-hint {
-            font-size: 0.75rem;
-            color: #666;
-            margin-top: 2px;
-            text-align: center;
+        #remove-hint { font-size: 0.75rem; color: #666; margin-top: 2px; text-align: center; }
+        /* Dev mode panel */
+        #dev-panel {
+            display: none; position: fixed; top: 0; right: 0; bottom: 0; width: 320px;
+            background: #1a1a2e; border-left: 2px solid #444; z-index: 200;
+            overflow-y: auto; padding: 16px; font-size: 0.8rem;
+        }
+        #dev-panel h3 { margin-bottom: 8px; color: #ffcc00; }
+        #dev-panel label { display: block; margin: 4px 0 2px; color: #aaa; }
+        #dev-panel input[type=number] { width: 60px; background: #222; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 2px 4px; }
+        #dev-panel input[type=checkbox] { margin-right: 4px; }
+        .dev-unit-section { margin-bottom: 16px; border-bottom: 1px solid #333; padding-bottom: 12px; }
+        .dev-btn { padding: 6px 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem; margin: 2px; }
+        #dev-toggle {
+            position: fixed; bottom: 8px; right: 8px; z-index: 201;
+            background: #333; color: #aaa; border: 1px solid #555; border-radius: 6px;
+            padding: 4px 10px; font-size: 0.7rem; cursor: pointer;
         }
     </style>
 </head>
 <body>
     <h1>⚔️ Fortress Clash</h1>
     <div id="status">Player 1: 配置してください</div>
-
     <div id="info">
-        <div class="player-info p1-info">🔵 P1 拠点 HP: <span id="p1-hp">20</span></div>
-        <div class="player-info p2-info">🔴 P2 拠点 HP: <span id="p2-hp">20</span></div>
+        <div class="player-info p1-info">🔵 P1 拠点 HP: <span id="p1-hp">30</span></div>
+        <div class="player-info p2-info">🔴 P2 拠点 HP: <span id="p2-hp">30</span></div>
     </div>
-
-    <div id="board-container">
-        <canvas id="canvas"></canvas>
-    </div>
-
+    <div id="board-container"><canvas id="canvas"></canvas></div>
     <div id="ui"></div>
     <div id="remove-hint"></div>
     <div id="controls">
@@ -187,13 +94,11 @@
         <input type="range" id="speed" min="1" max="5" value="2">
         <span id="speed-label">x1.0</span>
     </div>
-
     <div id="handover-overlay">
         <h2 id="handover-title"></h2>
         <p id="handover-desc"></p>
         <button class="action-btn" id="btn-handover" style="background:#ffcc00;color:#000;font-size:1.1rem;padding:14px 36px;">準備OK</button>
     </div>
-
     <div id="result-overlay">
         <div id="result-box">
             <h2 id="result-title"></h2>
@@ -201,42 +106,58 @@
             <button class="action-btn" id="btn-replay" style="background:#ffcc00;color:#000;">もう一回遊ぶ</button>
         </div>
     </div>
+    <div id="dev-panel"></div>
+    <button id="dev-toggle">DEV</button>
 
 <script>
 // ============================================================
-// Fortress Clash — Smooth Animation Browser Board Game
+// Fortress Clash — v3: All 5 improvements
 // ============================================================
-
 var canvas = document.getElementById('canvas');
 var ctx = canvas.getContext('2d');
 
-var COLS = 10;
-var ROWS = 8;
-var CELL = 64;
+// ---- Board size: wider (14x10) ----
+var COLS = 14;
+var ROWS = 10;
+var CELL = 48;
 var CANVAS_W = COLS * CELL;
 var CANVAS_H = ROWS * CELL;
 canvas.width = CANVAS_W;
 canvas.height = CANVAS_H;
 
-var P1 = 1;
-var P2 = 2;
+var P1 = 1, P2 = 2;
 
-// ---- Unit Types (balanced with unique strengths) ----
-// warrior: fast mover + fast attacker (CD=1), rushdown
-// archer:  longest range (4), safe chip damage
-// tank:    huge HP + 50% damage reduction, immovable wall
-// mage:    splash damage (hits target + all adjacent enemies)
-var UNIT_TYPES = {
+// ---- Default unit params (editable in dev mode) ----
+var DEFAULT_PARAMS = {
     warrior: { name: '戦士', emoji: '⚔️', hp: 12, atk: 3, range: 1, speed: 2, cd: 1, def: 0, splash: false, desc: '速攻・連撃' },
     archer:  { name: '弓兵', emoji: '🏹', hp: 7,  atk: 3, range: 4, speed: 1, cd: 2, def: 0, splash: false, desc: '最長射程' },
     tank:    { name: '盾兵', emoji: '🛡️', hp: 22, atk: 2, range: 1, speed: 1, cd: 2, def: 0.5, splash: false, desc: '被ダメ半減' },
     mage:    { name: '魔法', emoji: '🧙', hp: 6,  atk: 2, range: 2, speed: 1, cd: 2, def: 0, splash: true, desc: '範囲攻撃' },
 };
-var MAX_UNITS = 5;
-var FORTRESS_HP = 20;
 
-var FORTRESS_P1 = { x: 0, y: 4 };
-var FORTRESS_P2 = { x: 9, y: 3 };
+// Load saved params or use defaults
+function loadParams() {
+    try {
+        var saved = localStorage.getItem('fc_unit_params');
+        if (saved) return JSON.parse(saved);
+    } catch(e) {}
+    return null;
+}
+function saveParams() {
+    try { localStorage.setItem('fc_unit_params', JSON.stringify(UNIT_TYPES)); } catch(e) {}
+}
+function resetParams() {
+    UNIT_TYPES = JSON.parse(JSON.stringify(DEFAULT_PARAMS));
+    try { localStorage.removeItem('fc_unit_params'); } catch(e) {}
+}
+
+var UNIT_TYPES = loadParams() || JSON.parse(JSON.stringify(DEFAULT_PARAMS));
+var MAX_UNITS = 8;
+var FORTRESS_HP = 30;
+
+// Fortresses at center of each side
+var FORTRESS_P1 = { x: 0, y: 5 };
+var FORTRESS_P2 = { x: 13, y: 4 };
 
 // ---- Game State ----
 var phase = 'place_p1';
@@ -253,9 +174,11 @@ var tickInterval = 1200;
 var tickCount = 0;
 var countdownValue = 0;
 var lastFrameTime = 0;
+var projectiles = []; // { sx, sy, tx, ty, progress, color, speed }
 
-// Animation: constant speed (cells per second)
-var MOVE_SPEED = 1.8; // cells per second — smooth constant velocity
+// Animation
+var MOVE_SPEED = 1.5;
+var PROJECTILE_SPEED = 5.0;
 
 // ---- Helpers ----
 function getUnit(x, y) {
@@ -264,29 +187,22 @@ function getUnit(x, y) {
     }
     return null;
 }
-
 function isFortressAt(x, y) {
     return (fortresses[1].x === x && fortresses[1].y === y) ||
            (fortresses[2].x === x && fortresses[2].y === y);
 }
-
 function dist(a, b) { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
-
 function isPlacementZone(x, y, player) {
-    if (player === P1) return x >= 0 && x <= 2;
-    return x >= 7 && x <= 9;
+    if (player === P1) return x >= 0 && x <= 3;
+    return x >= COLS - 4 && x <= COLS - 1;
 }
-
 function screenToGrid(clientX, clientY) {
     var rect = canvas.getBoundingClientRect();
-    var scaleX = CANVAS_W / rect.width;
-    var scaleY = CANVAS_H / rect.height;
-    var x = Math.floor((clientX - rect.left) * scaleX / CELL);
-    var y = Math.floor((clientY - rect.top) * scaleY / CELL);
-    return { x: x, y: y };
+    return {
+        x: Math.floor((clientX - rect.left) * (CANVAS_W / rect.width) / CELL),
+        y: Math.floor((clientY - rect.top) * (CANVAS_H / rect.height) / CELL),
+    };
 }
-
-// Move value toward target at constant speed, return new value
 function moveToward(current, target, maxStep) {
     var diff = target - current;
     if (Math.abs(diff) <= maxStep) return target;
@@ -298,271 +214,200 @@ function draw() {
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
     drawGrid();
     drawFortresses();
+    drawProjectiles();
     drawUnits();
 }
 
 function drawGrid() {
     for (var y = 0; y < ROWS; y++) {
         for (var x = 0; x < COLS; x++) {
-            var px = x * CELL;
-            var py = y * CELL;
-
+            var px = x * CELL, py = y * CELL;
             var bg = '#18181e';
             if (phase === 'place_p1' && isPlacementZone(x, y, P1)) bg = '#1a2244';
             else if (phase === 'place_p2' && isPlacementZone(x, y, P2)) bg = '#2a1a1a';
-            else if (x <= 2) bg = '#141430';
-            else if (x >= 7) bg = '#1e1418';
-
+            else if (x <= 3) bg = '#141430';
+            else if (x >= COLS - 4) bg = '#1e1418';
             ctx.fillStyle = bg;
             ctx.fillRect(px, py, CELL, CELL);
             ctx.strokeStyle = '#2a2a3a';
             ctx.strokeRect(px, py, CELL, CELL);
         }
     }
-
     ctx.strokeStyle = '#444';
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
-    ctx.moveTo(5 * CELL, 0);
-    ctx.lineTo(5 * CELL, ROWS * CELL);
+    ctx.moveTo(COLS / 2 * CELL, 0);
+    ctx.lineTo(COLS / 2 * CELL, ROWS * CELL);
     ctx.stroke();
     ctx.setLineDash([]);
 }
 
-function drawFortress(f, playerNum) {
-    var px = f.x * CELL + CELL / 2;
-    var py = f.y * CELL + CELL / 2;
-
-    ctx.shadowColor = playerNum === P1 ? '#4488ff' : '#ff4444';
+function drawFortress(f, pn) {
+    var px = f.x * CELL + CELL / 2, py = f.y * CELL + CELL / 2;
+    ctx.shadowColor = pn === P1 ? '#4488ff' : '#ff4444';
     ctx.shadowBlur = f.hp > 0 ? 15 : 0;
-
-    ctx.fillStyle = f.hp > 0 ? (playerNum === P1 ? '#335599' : '#993333') : '#333';
-    ctx.beginPath();
-    ctx.arc(px, py, CELL * 0.42, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = playerNum === P1 ? '#4488ff' : '#ff4444';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    ctx.lineWidth = 1;
-
+    ctx.fillStyle = f.hp > 0 ? (pn === P1 ? '#335599' : '#993333') : '#333';
+    ctx.beginPath(); ctx.arc(px, py, CELL * 0.42, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = pn === P1 ? '#4488ff' : '#ff4444';
+    ctx.lineWidth = 3; ctx.stroke(); ctx.lineWidth = 1;
     ctx.shadowBlur = 0;
-
-    ctx.font = '26px serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.font = (CELL * 0.45) + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('🏰', px, py - 2);
-
-    ctx.font = 'bold 11px sans-serif';
-    ctx.fillStyle = '#fff';
-    ctx.fillText(playerNum === P1 ? 'P1' : 'P2', px, py - CELL * 0.35);
-
+    ctx.font = 'bold 10px sans-serif'; ctx.fillStyle = '#fff';
+    ctx.fillText(pn === P1 ? 'P1' : 'P2', px, py - CELL * 0.35);
     if (f.hp > 0) {
-        var bw = CELL * 0.7;
-        var bx = px - bw / 2;
-        var by = py + CELL * 0.34;
-        ctx.fillStyle = '#333';
-        ctx.fillRect(bx, by, bw, 6);
+        var bw = CELL * 0.7, bx = px - bw / 2, by = py + CELL * 0.34;
+        ctx.fillStyle = '#333'; ctx.fillRect(bx, by, bw, 5);
         ctx.fillStyle = f.hp / f.maxHp > 0.3 ? '#44cc44' : '#ff4444';
-        ctx.fillRect(bx, by, bw * (f.hp / f.maxHp), 6);
-        ctx.strokeStyle = '#555';
-        ctx.strokeRect(bx, by, bw, 6);
+        ctx.fillRect(bx, by, bw * (f.hp / f.maxHp), 5);
     }
 }
+function drawFortresses() { drawFortress(fortresses[1], P1); drawFortress(fortresses[2], P2); }
 
-function drawFortresses() {
-    drawFortress(fortresses[1], P1);
-    drawFortress(fortresses[2], P2);
+function drawProjectiles() {
+    for (var i = 0; i < projectiles.length; i++) {
+        var p = projectiles[i];
+        var cx = (p.sx + (p.tx - p.sx) * p.progress) * CELL + CELL / 2;
+        var cy = (p.sy + (p.ty - p.sy) * p.progress) * CELL + CELL / 2;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(cx, cy, p.size || 4, 0, Math.PI * 2);
+        ctx.fill();
+        // Trail
+        var tx = (p.sx + (p.tx - p.sx) * Math.max(0, p.progress - 0.15)) * CELL + CELL / 2;
+        var ty = (p.sy + (p.ty - p.sy) * Math.max(0, p.progress - 0.15)) * CELL + CELL / 2;
+        ctx.strokeStyle = p.color;
+        ctx.globalAlpha = 0.4;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(cx, cy); ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = 1;
+        ctx.shadowBlur = 0;
+    }
 }
 
 function drawUnits() {
     for (var i = 0; i < units.length; i++) {
         var u = units[i];
         if (u.hp <= 0) continue;
-
         if (phase === 'place_p1' && u.player !== P1) continue;
         if (phase === 'place_p2' && u.player !== P2) continue;
 
-        var px = u.vx * CELL + CELL / 2;
-        var py = u.vy * CELL + CELL / 2;
+        var px = u.vx * CELL + CELL / 2, py = u.vy * CELL + CELL / 2;
         var type = UNIT_TYPES[u.type];
 
-        // Team color circle
         ctx.fillStyle = u.player === P1 ? 'rgba(68,136,255,0.3)' : 'rgba(255,68,68,0.3)';
-        ctx.beginPath();
-        ctx.arc(px, py, CELL * 0.38, 0, Math.PI * 2);
-        ctx.fill();
-
+        ctx.beginPath(); ctx.arc(px, py, CELL * 0.38, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = u.player === P1 ? '#4488ff' : '#ff4444';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 1;
 
-        // Special indicator for tank (shield glow) and mage (magic aura)
+        // Special auras
         if (u.type === 'tank' && phase === 'battle') {
-            ctx.strokeStyle = 'rgba(100,180,255,0.4)';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(px, py, CELL * 0.44, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(100,180,255,0.4)'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(px, py, CELL * 0.44, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;
         }
         if (u.type === 'mage' && phase === 'battle') {
-            ctx.strokeStyle = 'rgba(200,100,255,0.3)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(px, py, CELL * 0.48, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(200,100,255,0.3)'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(px, py, CELL * 0.48, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;
         }
 
-        // Emoji with bob when moving
         var isMoving = (Math.abs(u.vx - u.x) > 0.02 || Math.abs(u.vy - u.y) > 0.02);
-        var bobOffset = 0;
-        if (isMoving) {
-            bobOffset = Math.sin(Date.now() / 120) * 2;
-        }
-
-        ctx.font = '22px serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(type.emoji, px, py - 2 + bobOffset);
+        var bob = isMoving ? Math.sin(Date.now() / 120) * 2 : 0;
+        ctx.font = (CELL * 0.4) + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(type.emoji, px, py - 2 + bob);
 
         // HP bar
-        var bw = CELL * 0.6;
-        var bx = px - bw / 2;
-        var by = py + CELL * 0.3;
-        ctx.fillStyle = '#222';
-        ctx.fillRect(bx, by, bw, 4);
-        var hpRatio = u.hp / type.hp;
-        ctx.fillStyle = hpRatio > 0.5 ? '#44cc44' : hpRatio > 0.25 ? '#ccaa00' : '#ff4444';
-        ctx.fillRect(bx, by, bw * hpRatio, 4);
+        var bw = CELL * 0.6, bx = px - bw / 2, by = py + CELL * 0.3;
+        ctx.fillStyle = '#222'; ctx.fillRect(bx, by, bw, 3);
+        var hpR = u.hp / type.hp;
+        ctx.fillStyle = hpR > 0.5 ? '#44cc44' : hpR > 0.25 ? '#ccaa00' : '#ff4444';
+        ctx.fillRect(bx, by, bw * Math.max(0, hpR), 3);
 
-        // Attack flash
         if (u.flashTimer > 0) {
-            var flashAlpha = u.flashTimer * 0.04;
-            ctx.fillStyle = u.type === 'mage'
-                ? 'rgba(200,100,255,' + flashAlpha + ')'
-                : 'rgba(255,255,100,' + flashAlpha + ')';
-            ctx.beginPath();
-            ctx.arc(px, py, CELL * 0.45, 0, Math.PI * 2);
-            ctx.fill();
+            var fa = u.flashTimer * 0.04;
+            ctx.fillStyle = u.type === 'mage' ? 'rgba(200,100,255,' + fa + ')' : 'rgba(255,255,100,' + fa + ')';
+            ctx.beginPath(); ctx.arc(px, py, CELL * 0.45, 0, Math.PI * 2); ctx.fill();
         }
-
-        // Damage number popup
         if (u.damagePopup > 0 && u.lastDamage > 0) {
-            var popAlpha = Math.min(1, u.damagePopup / 15);
-            var popY = py - CELL * 0.4 - (30 - u.damagePopup);
-            ctx.font = 'bold 14px sans-serif';
-            ctx.fillStyle = 'rgba(255,80,80,' + popAlpha + ')';
-            ctx.fillText('-' + u.lastDamage, px, popY);
+            var pa = Math.min(1, u.damagePopup / 15);
+            ctx.font = 'bold 12px sans-serif';
+            ctx.fillStyle = 'rgba(255,80,80,' + pa + ')';
+            ctx.fillText('-' + u.lastDamage, px, py - CELL * 0.4 - (30 - u.damagePopup));
         }
     }
 }
 
-// ---- Animation Loop (constant-speed movement) ----
+// ---- Animation Loop ----
 var animRunning = false;
-
 function startAnimLoop() {
     if (animRunning) return;
     animRunning = true;
     lastFrameTime = performance.now();
     requestAnimationFrame(animFrame);
 }
-
-function animFrame(timestamp) {
+function animFrame(ts) {
     if (!animRunning) return;
+    var dt = Math.min((ts - lastFrameTime) / 1000, 0.1);
+    lastFrameTime = ts;
+    var any = false;
 
-    var dt = (timestamp - lastFrameTime) / 1000; // delta in seconds
-    lastFrameTime = timestamp;
-    // Clamp dt to avoid jumps on tab switch
-    if (dt > 0.1) dt = 0.1;
-
-    var anyAnimating = false;
     for (var i = 0; i < units.length; i++) {
         var u = units[i];
         if (u.hp <= 0) continue;
-
-        // Constant-speed movement toward logical position
         var step = MOVE_SPEED * dt;
-        var dx = u.x - u.vx;
-        var dy = u.y - u.vy;
-
-        if (Math.abs(dx) > 0.005 || Math.abs(dy) > 0.005) {
+        if (Math.abs(u.x - u.vx) > 0.005 || Math.abs(u.y - u.vy) > 0.005) {
             u.vx = moveToward(u.vx, u.x, step);
             u.vy = moveToward(u.vy, u.y, step);
-            anyAnimating = true;
-        } else {
-            u.vx = u.x;
-            u.vy = u.y;
-        }
+            any = true;
+        } else { u.vx = u.x; u.vy = u.y; }
+        if (u.flashTimer > 0) { u.flashTimer = Math.max(0, u.flashTimer - dt * 30); any = true; }
+        if (u.damagePopup > 0) { u.damagePopup = Math.max(0, u.damagePopup - dt * 25); any = true; }
+    }
 
-        // Decay flash timer
-        if (u.flashTimer > 0) {
-            u.flashTimer = Math.max(0, u.flashTimer - dt * 30);
-            anyAnimating = true;
+    // Animate projectiles
+    for (var i = projectiles.length - 1; i >= 0; i--) {
+        var p = projectiles[i];
+        p.progress += PROJECTILE_SPEED * dt / Math.max(1, p.dist);
+        if (p.progress >= 1) {
+            projectiles.splice(i, 1);
         }
-
-        // Decay damage popup
-        if (u.damagePopup > 0) {
-            u.damagePopup = Math.max(0, u.damagePopup - dt * 25);
-            anyAnimating = true;
-        }
+        any = true;
     }
 
     draw();
-
-    if (phase === 'battle' || phase === 'countdown' || anyAnimating) {
+    if (phase === 'battle' || phase === 'countdown' || any) {
         requestAnimationFrame(animFrame);
-    } else {
-        animRunning = false;
-    }
+    } else { animRunning = false; }
 }
 
-// ---- UI Building ----
+// ---- UI ----
 function buildUI() {
     var uiEl = document.getElementById('ui');
     while (uiEl.firstChild) uiEl.removeChild(uiEl.firstChild);
-
     var hintEl = document.getElementById('remove-hint');
-
-    if (phase !== 'place_p1' && phase !== 'place_p2') {
-        uiEl.style.display = 'none';
-        hintEl.textContent = '';
-        return;
-    }
+    if (phase !== 'place_p1' && phase !== 'place_p2') { uiEl.style.display = 'none'; hintEl.textContent = ''; return; }
     uiEl.style.display = 'flex';
-
     var remaining = MAX_UNITS - placedCount[currentPlayer];
-
     var keys = Object.keys(UNIT_TYPES);
     for (var i = 0; i < keys.length; i++) {
-        var key = keys[i];
-        var type = UNIT_TYPES[key];
-
+        var key = keys[i], type = UNIT_TYPES[key];
         var btn = document.createElement('button');
         btn.className = 'unit-btn' + (key === selectedType ? ' selected' : '');
-
-        var nameText = document.createTextNode(type.emoji + ' ' + type.name);
-        btn.appendChild(nameText);
+        btn.appendChild(document.createTextNode(type.emoji + ' ' + type.name));
         btn.appendChild(document.createElement('br'));
-
-        var descSpan = document.createElement('span');
-        descSpan.style.cssText = 'font-size:0.75rem;color:#aaa;';
-        descSpan.textContent = type.desc;
-        btn.appendChild(descSpan);
-
-        (function(k) {
-            btn.addEventListener('click', function() { selectedType = k; buildUI(); });
-        })(key);
+        var ds = document.createElement('span');
+        ds.style.cssText = 'font-size:0.75rem;color:#aaa;';
+        ds.textContent = type.desc;
+        btn.appendChild(ds);
+        (function(k) { btn.addEventListener('click', function() { selectedType = k; buildUI(); }); })(key);
         uiEl.appendChild(btn);
     }
-
-    var countEl = document.createElement('div');
-    countEl.style.cssText = 'display:flex;align-items:center;font-size:1rem;color:#ffcc00;';
-    countEl.textContent = '残り ' + remaining + ' 体';
-    uiEl.appendChild(countEl);
-
+    var ce = document.createElement('div');
+    ce.style.cssText = 'display:flex;align-items:center;font-size:1rem;color:#ffcc00;';
+    ce.textContent = '残り ' + remaining + ' 体';
+    uiEl.appendChild(ce);
     hintEl.textContent = '配置済みキャラをタップで削除';
 }
 
@@ -570,116 +415,68 @@ function updateStatus() {
     var el = document.getElementById('status');
     document.getElementById('p1-hp').textContent = String(Math.max(0, Math.ceil(fortresses[1].hp)));
     document.getElementById('p2-hp').textContent = String(Math.max(0, Math.ceil(fortresses[2].hp)));
-
-    var readyBtn = document.getElementById('btn-ready');
-    var speedCtrl = document.getElementById('speed-control');
-
+    var rb = document.getElementById('btn-ready');
+    var rs = document.getElementById('btn-reset');
+    var sc = document.getElementById('speed-control');
     switch (phase) {
         case 'place_p1':
             el.textContent = '🔵 P1: 自陣にキャラを配置（残り ' + (MAX_UNITS - placedCount[1]) + ' 体）';
-            readyBtn.style.display = '';
-            readyBtn.disabled = placedCount[1] === 0;
-            speedCtrl.style.display = 'none';
-            break;
+            rb.style.display = ''; rb.disabled = placedCount[1] === 0;
+            rs.textContent = 'リセット 🔄'; sc.style.display = 'none'; break;
         case 'place_p2':
             el.textContent = '🔴 P2: 自陣にキャラを配置（残り ' + (MAX_UNITS - placedCount[2]) + ' 体）';
-            readyBtn.style.display = '';
-            readyBtn.disabled = placedCount[2] === 0;
-            speedCtrl.style.display = 'none';
-            break;
+            rb.style.display = ''; rb.disabled = placedCount[2] === 0;
+            rs.textContent = 'P2 リセット 🔄'; sc.style.display = 'none'; break;
         case 'countdown':
             el.textContent = '⚔️ バトル開始まで... ' + countdownValue;
-            readyBtn.style.display = 'none';
-            speedCtrl.style.display = 'none';
-            break;
+            rb.style.display = 'none'; sc.style.display = 'none'; break;
         case 'battle':
             el.textContent = '⚔️ バトル中！ (ターン ' + tickCount + ')';
-            readyBtn.style.display = 'none';
-            speedCtrl.style.display = 'flex';
-            break;
+            rb.style.display = 'none'; sc.style.display = 'flex'; break;
         case 'ended':
-            readyBtn.style.display = 'none';
-            speedCtrl.style.display = 'none';
-            break;
+            rb.style.display = 'none'; sc.style.display = 'none'; break;
         default:
-            readyBtn.style.display = 'none';
-            speedCtrl.style.display = 'none';
-            break;
+            rb.style.display = 'none'; sc.style.display = 'none'; break;
     }
 }
 
 // ---- Placement ----
-function handlePlace(clientX, clientY) {
-    var pos = screenToGrid(clientX, clientY);
-    var x = pos.x;
-    var y = pos.y;
-
+function handlePlace(cx, cy) {
+    var pos = screenToGrid(cx, cy), x = pos.x, y = pos.y;
     if (phase !== 'place_p1' && phase !== 'place_p2') return;
-
-    var existingUnit = getUnit(x, y);
-    if (existingUnit && existingUnit.player === currentPlayer) {
+    var eu = getUnit(x, y);
+    if (eu && eu.player === currentPlayer) {
         for (var i = units.length - 1; i >= 0; i--) {
             if (units[i].x === x && units[i].y === y && units[i].player === currentPlayer) {
-                units.splice(i, 1);
-                placedCount[currentPlayer]--;
-                buildUI();
-                updateStatus();
-                draw();
-                return;
+                units.splice(i, 1); placedCount[currentPlayer]--;
+                buildUI(); updateStatus(); draw(); return;
             }
         }
     }
-
     if (placedCount[currentPlayer] >= MAX_UNITS) return;
     if (!isPlacementZone(x, y, currentPlayer)) return;
     if (getUnit(x, y) || isFortressAt(x, y)) return;
-
     units.push({
-        player: currentPlayer,
-        type: selectedType,
-        x: x, y: y,
-        vx: x, vy: y, // visual position starts at logical position
-        hp: UNIT_TYPES[selectedType].hp,
-        cooldown: 0,
-        flashTimer: 0,
-        damagePopup: 0,
-        lastDamage: 0,
+        player: currentPlayer, type: selectedType, x: x, y: y, vx: x, vy: y,
+        hp: UNIT_TYPES[selectedType].hp, cooldown: 0, flashTimer: 0, damagePopup: 0, lastDamage: 0,
     });
     placedCount[currentPlayer]++;
-    buildUI();
-    updateStatus();
-    draw();
+    buildUI(); updateStatus(); draw();
 }
+canvas.addEventListener('click', function(e) { handlePlace(e.clientX, e.clientY); });
+canvas.addEventListener('touchstart', function(e) { e.preventDefault(); handlePlace(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
+canvas.addEventListener('contextmenu', function(e) { e.preventDefault(); });
 
-canvas.addEventListener('click', function(e) {
-    handlePlace(e.clientX, e.clientY);
-});
-
-canvas.addEventListener('touchstart', function(e) {
-    e.preventDefault();
-    var touch = e.touches[0];
-    handlePlace(touch.clientX, touch.clientY);
-}, { passive: false });
-
-canvas.addEventListener('contextmenu', function(e) {
-    e.preventDefault();
-});
-
-// ---- Ready button ----
+// ---- Ready ----
 document.getElementById('btn-ready').addEventListener('click', function() {
     if (phase === 'place_p1') {
         phase = 'handover';
         document.getElementById('handover-title').textContent = '🔴 Player 2 の番です';
         document.getElementById('handover-desc').textContent = 'Player 1 は画面を渡してください。\nPlayer 2 が準備できたらボタンを押してね！';
         document.getElementById('handover-overlay').style.display = 'flex';
-        buildUI();
-        updateStatus();
+        buildUI(); updateStatus();
     } else if (phase === 'place_p2') {
-        phase = 'countdown';
-        buildUI();
-        updateStatus();
-        draw();
-        startCountdown();
+        phase = 'countdown'; buildUI(); updateStatus(); draw(); startCountdown();
     }
 });
 
@@ -687,247 +484,291 @@ document.getElementById('btn-ready').addEventListener('click', function() {
 document.getElementById('btn-handover').addEventListener('click', function() {
     if (phase === 'handover') {
         document.getElementById('handover-overlay').style.display = 'none';
-        phase = 'place_p2';
-        currentPlayer = P2;
-        selectedType = 'warrior';
-        buildUI();
-        updateStatus();
-        draw();
+        phase = 'place_p2'; currentPlayer = P2; selectedType = 'warrior';
+        buildUI(); updateStatus(); draw();
+    }
+});
+
+// ---- Reset (per-player) ----
+document.getElementById('btn-reset').addEventListener('click', function() {
+    if (phase === 'place_p1') {
+        // Remove P1 units only
+        for (var i = units.length - 1; i >= 0; i--) {
+            if (units[i].player === P1) units.splice(i, 1);
+        }
+        placedCount[1] = 0;
+        buildUI(); updateStatus(); draw();
+    } else if (phase === 'place_p2') {
+        // Remove P2 units only, stay on P2
+        for (var i = units.length - 1; i >= 0; i--) {
+            if (units[i].player === P2) units.splice(i, 1);
+        }
+        placedCount[2] = 0;
+        buildUI(); updateStatus(); draw();
+    } else {
+        resetGame();
     }
 });
 
 // ---- Countdown ----
 function startCountdown() {
-    countdownValue = 3;
-    updateStatus();
-    draw();
-    startAnimLoop();
-
-    var countdownTimer = setInterval(function() {
+    countdownValue = 3; updateStatus(); draw(); startAnimLoop();
+    var ct = setInterval(function() {
         countdownValue--;
-        if (countdownValue <= 0) {
-            clearInterval(countdownTimer);
-            startBattle();
-        } else {
-            updateStatus();
-        }
+        if (countdownValue <= 0) { clearInterval(ct); startBattle(); }
+        else updateStatus();
     }, 800);
 }
 
 // ---- Speed ----
 document.getElementById('speed').addEventListener('input', function(e) {
     var v = parseInt(e.target.value);
-    var speeds = { 1: 2000, 2: 1200, 3: 800, 4: 500, 5: 300 };
-    var labels = { 1: 'x0.5', 2: 'x1.0', 3: 'x1.5', 4: 'x2.5', 5: 'x4.0' };
-    tickInterval = speeds[v];
-    document.getElementById('speed-label').textContent = labels[v];
-    if (battleTimer) {
-        clearInterval(battleTimer);
-        battleTimer = setInterval(battleTick, tickInterval);
-    }
+    var sp = { 1: 2000, 2: 1200, 3: 800, 4: 500, 5: 300 };
+    var lb = { 1: 'x0.5', 2: 'x1.0', 3: 'x1.5', 4: 'x2.5', 5: 'x4.0' };
+    tickInterval = sp[v];
+    document.getElementById('speed-label').textContent = lb[v];
+    if (battleTimer) { clearInterval(battleTimer); battleTimer = setInterval(battleTick, tickInterval); }
 });
 
-// ---- Battle Logic ----
+// ---- Battle ----
 function startBattle() {
-    phase = 'battle';
-    tickCount = 0;
-    buildUI();
-    updateStatus();
-    draw();
-    startAnimLoop();
+    phase = 'battle'; tickCount = 0; projectiles = [];
+    buildUI(); updateStatus(); draw(); startAnimLoop();
     battleTimer = setInterval(battleTick, tickInterval);
 }
 
 function battleTick() {
     tickCount++;
+    var alive = [];
+    for (var i = 0; i < units.length; i++) { if (units[i].hp > 0) alive.push(units[i]); }
 
-    var aliveUnits = [];
-    for (var i = 0; i < units.length; i++) {
-        if (units[i].hp > 0) aliveUnits.push(units[i]);
-    }
-
-    for (var i = 0; i < aliveUnits.length; i++) {
-        var u = aliveUnits[i];
+    for (var i = 0; i < alive.length; i++) {
+        var u = alive[i];
         if (u.cooldown > 0) { u.cooldown--; continue; }
-
         var type = UNIT_TYPES[u.type];
-        var enemyPlayer = u.player === P1 ? P2 : P1;
+        var ep = u.player === P1 ? P2 : P1;
 
-        var target = null;
-        var targetDist = Infinity;
-        var targetIsFortress = false;
-
-        for (var j = 0; j < aliveUnits.length; j++) {
-            var e = aliveUnits[j];
+        var target = null, tDist = Infinity, tFort = false;
+        for (var j = 0; j < alive.length; j++) {
+            var e = alive[j];
             if (e.player === u.player) continue;
             var d = dist(u, e);
-            if (d < targetDist) { target = e; targetDist = d; targetIsFortress = false; }
+            if (d < tDist) { target = e; tDist = d; tFort = false; }
         }
-
-        var ef = fortresses[enemyPlayer];
+        var ef = fortresses[ep];
         if (ef && ef.hp > 0) {
             var d2 = dist(u, ef);
-            if (d2 < targetDist) { target = ef; targetDist = d2; targetIsFortress = true; }
+            if (d2 < tDist) { target = ef; tDist = d2; tFort = true; }
         }
-
         if (!target) continue;
 
-        if (targetDist <= type.range) {
-            // Attack — apply damage with defense reduction
+        if (tDist <= type.range) {
+            // Attack
             var dmg = type.atk;
-            var actualDmg = dmg;
-
-            // Tank defense: reduce incoming damage by def ratio
+            var actual = dmg;
             if (target.type && UNIT_TYPES[target.type] && UNIT_TYPES[target.type].def > 0) {
-                actualDmg = Math.max(1, Math.ceil(dmg * (1 - UNIT_TYPES[target.type].def)));
+                actual = Math.max(1, Math.ceil(dmg * (1 - UNIT_TYPES[target.type].def)));
             }
-
-            target.hp -= actualDmg;
+            target.hp -= actual;
             u.cooldown = type.cd;
             u.flashTimer = 20;
+            if (target.damagePopup !== undefined) { target.damagePopup = 30; target.lastDamage = actual; }
 
-            if (target.damagePopup !== undefined) {
-                target.damagePopup = 30;
-                target.lastDamage = actualDmg;
+            // Ranged projectile
+            if (type.range >= 2) {
+                var tx = tFort ? target.x : target.x;
+                var ty = tFort ? target.y : target.y;
+                var color = u.type === 'mage' ? '#cc66ff' : '#ffcc00';
+                var sz = u.type === 'mage' ? 5 : 3;
+                projectiles.push({
+                    sx: u.vx, sy: u.vy, tx: tx, ty: ty,
+                    progress: 0, color: color, size: sz,
+                    dist: Math.sqrt(Math.pow(tx - u.vx, 2) + Math.pow(ty - u.vy, 2)),
+                });
             }
 
-            // Mage splash: deal 1 damage to all other enemies adjacent to target
-            if (type.splash && !targetIsFortress) {
-                for (var s = 0; s < aliveUnits.length; s++) {
-                    var su = aliveUnits[s];
+            // Mage splash
+            if (type.splash && !tFort) {
+                for (var s = 0; s < alive.length; s++) {
+                    var su = alive[s];
                     if (su.player === u.player || su === target || su.hp <= 0) continue;
                     if (dist(su, target) <= 1) {
-                        var splashDmg = 1;
-                        if (UNIT_TYPES[su.type] && UNIT_TYPES[su.type].def > 0) {
-                            splashDmg = Math.max(1, Math.ceil(1 * (1 - UNIT_TYPES[su.type].def)));
-                        }
-                        su.hp -= splashDmg;
-                        su.damagePopup = 30;
-                        su.lastDamage = splashDmg;
+                        var sd = 1;
+                        if (UNIT_TYPES[su.type] && UNIT_TYPES[su.type].def > 0) sd = Math.max(1, Math.ceil(1 * (1 - UNIT_TYPES[su.type].def)));
+                        su.hp -= sd; su.damagePopup = 30; su.lastDamage = sd;
                     }
                 }
             }
-
-            if (target.hp <= 0 && targetIsFortress) {
-                endGame(u.player);
-                return;
-            }
+            if (target.hp <= 0 && tFort) { endGame(u.player); return; }
         } else {
-            // Move — update logical position, visual will lerp
-            var dx = Math.sign(target.x - u.x);
-            var dy = Math.sign(target.y - u.y);
-
-            var candidates = [
+            // Move
+            var dx = Math.sign(target.x - u.x), dy = Math.sign(target.y - u.y);
+            var cands = [
                 { x: u.x + dx, y: u.y },
                 { x: u.x, y: u.y + dy },
                 { x: u.x + dx, y: u.y + dy },
             ];
             var moved = false;
-            for (var k = 0; k < candidates.length; k++) {
-                var m = candidates[k];
-                if (m.x >= 0 && m.x < COLS && m.y >= 0 && m.y < ROWS &&
-                    !getUnit(m.x, m.y) && !isFortressAt(m.x, m.y)) {
-                    u.x = m.x;
-                    u.y = m.y;
-                    moved = true;
-                    break;
+            for (var k = 0; k < cands.length; k++) {
+                var m = cands[k];
+                if (m.x >= 0 && m.x < COLS && m.y >= 0 && m.y < ROWS && !getUnit(m.x, m.y) && !isFortressAt(m.x, m.y)) {
+                    u.x = m.x; u.y = m.y; moved = true; break;
                 }
             }
-
             if (type.speed >= 2 && moved) {
-                var dx2 = Math.sign(target.x - u.x);
-                var dy2 = Math.sign(target.y - u.y);
-                var cands2 = [
-                    { x: u.x + dx2, y: u.y },
-                    { x: u.x, y: u.y + dy2 },
-                ];
-                for (var k2 = 0; k2 < cands2.length; k2++) {
-                    var m2 = cands2[k2];
-                    if (m2.x >= 0 && m2.x < COLS && m2.y >= 0 && m2.y < ROWS &&
-                        !getUnit(m2.x, m2.y) && !isFortressAt(m2.x, m2.y)) {
-                        u.x = m2.x;
-                        u.y = m2.y;
-                        break;
+                var dx2 = Math.sign(target.x - u.x), dy2 = Math.sign(target.y - u.y);
+                var c2 = [{ x: u.x + dx2, y: u.y }, { x: u.x, y: u.y + dy2 }];
+                for (var k2 = 0; k2 < c2.length; k2++) {
+                    var m2 = c2[k2];
+                    if (m2.x >= 0 && m2.x < COLS && m2.y >= 0 && m2.y < ROWS && !getUnit(m2.x, m2.y) && !isFortressAt(m2.x, m2.y)) {
+                        u.x = m2.x; u.y = m2.y; break;
                     }
                 }
             }
-
             u.cooldown = 0;
         }
     }
 
-    // Remove dead units
-    var alive = [];
-    for (var i = 0; i < units.length; i++) {
-        if (units[i].hp > 0) alive.push(units[i]);
-    }
-    units = alive;
-
-    var p1alive = false;
-    var p2alive = false;
-    for (var i = 0; i < units.length; i++) {
-        if (units[i].player === P1) p1alive = true;
-        if (units[i].player === P2) p2alive = true;
-    }
-    if (!p1alive && !p2alive) {
+    var al = [];
+    for (var i = 0; i < units.length; i++) { if (units[i].hp > 0) al.push(units[i]); }
+    units = al;
+    var p1a = false, p2a = false;
+    for (var i = 0; i < units.length; i++) { if (units[i].player === P1) p1a = true; if (units[i].player === P2) p2a = true; }
+    if (!p1a && !p2a) {
         if (fortresses[1].hp > fortresses[2].hp) endGame(P1);
         else if (fortresses[2].hp > fortresses[1].hp) endGame(P2);
         else endGame(0);
         return;
     }
-
     updateStatus();
 }
 
 function endGame(winner) {
-    phase = 'ended';
-    clearInterval(battleTimer);
-    battleTimer = null;
-
-    var title = document.getElementById('result-title');
-    var detail = document.getElementById('result-detail');
-
-    if (winner === 0) {
-        title.textContent = '引き分け！';
-        detail.textContent = '両者の拠点が同じHPでした';
-    } else {
-        var color = winner === P1 ? '🔵' : '🔴';
-        title.textContent = color + ' Player ' + winner + ' の勝利！';
-        detail.textContent = 'ターン ' + tickCount + ' で決着';
+    phase = 'ended'; clearInterval(battleTimer); battleTimer = null;
+    var t = document.getElementById('result-title'), d = document.getElementById('result-detail');
+    if (winner === 0) { t.textContent = '引き分け！'; d.textContent = '両者の拠点が同じHPでした'; }
+    else {
+        t.textContent = (winner === P1 ? '🔵' : '🔴') + ' Player ' + winner + ' の勝利！';
+        d.textContent = 'ターン ' + tickCount + ' で決着';
     }
-
     document.getElementById('result-overlay').style.display = 'flex';
-    updateStatus();
-    draw();
+    updateStatus(); draw();
 }
 
-// ---- Reset ----
 document.getElementById('btn-replay').addEventListener('click', resetGame);
-document.getElementById('btn-reset').addEventListener('click', resetGame);
 
 function resetGame() {
-    clearInterval(battleTimer);
-    battleTimer = null;
-    animRunning = false;
-    phase = 'place_p1';
-    currentPlayer = P1;
-    selectedType = 'warrior';
-    units = [];
-    placedCount = { 1: 0, 2: 0 };
-    tickCount = 0;
-    fortresses[1].hp = FORTRESS_HP;
-    fortresses[2].hp = FORTRESS_HP;
+    clearInterval(battleTimer); battleTimer = null; animRunning = false;
+    phase = 'place_p1'; currentPlayer = P1; selectedType = 'warrior';
+    units = []; placedCount = { 1: 0, 2: 0 }; tickCount = 0; projectiles = [];
+    fortresses[1].hp = FORTRESS_HP; fortresses[2].hp = FORTRESS_HP;
     document.getElementById('result-overlay').style.display = 'none';
     document.getElementById('handover-overlay').style.display = 'none';
-    buildUI();
-    updateStatus();
-    draw();
+    buildUI(); updateStatus(); draw();
+}
+
+// ============================================================
+// Dev Mode: Parameter Editor
+// ============================================================
+var devOpen = false;
+document.getElementById('dev-toggle').addEventListener('click', function() {
+    devOpen = !devOpen;
+    document.getElementById('dev-panel').style.display = devOpen ? 'block' : 'none';
+    if (devOpen) buildDevPanel();
+});
+
+function buildDevPanel() {
+    var panel = document.getElementById('dev-panel');
+    while (panel.firstChild) panel.removeChild(panel.firstChild);
+
+    var title = document.createElement('h3');
+    title.textContent = '⚙️ パラメーター編集 (Dev)';
+    panel.appendChild(title);
+
+    var keys = Object.keys(UNIT_TYPES);
+    var editableFields = [
+        { key: 'hp', label: 'HP', type: 'number', step: 1 },
+        { key: 'atk', label: 'ATK', type: 'number', step: 1 },
+        { key: 'range', label: '射程', type: 'number', step: 1 },
+        { key: 'speed', label: '速度', type: 'number', step: 1 },
+        { key: 'cd', label: 'CD', type: 'number', step: 1 },
+        { key: 'def', label: '防御率', type: 'number', step: 0.1 },
+        { key: 'splash', label: '範囲攻撃', type: 'checkbox' },
+    ];
+
+    for (var i = 0; i < keys.length; i++) {
+        var unitKey = keys[i];
+        var type = UNIT_TYPES[unitKey];
+        var section = document.createElement('div');
+        section.className = 'dev-unit-section';
+
+        var heading = document.createElement('div');
+        heading.style.cssText = 'font-weight:bold;color:#eee;margin-bottom:6px;font-size:0.9rem;';
+        heading.textContent = type.emoji + ' ' + type.name + ' (' + unitKey + ')';
+        section.appendChild(heading);
+
+        for (var j = 0; j < editableFields.length; j++) {
+            var field = editableFields[j];
+            var lbl = document.createElement('label');
+            lbl.textContent = field.label + ': ';
+
+            if (field.type === 'checkbox') {
+                var cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = type[field.key];
+                (function(uk, fk) {
+                    cb.addEventListener('change', function() {
+                        UNIT_TYPES[uk][fk] = this.checked;
+                    });
+                })(unitKey, field.key);
+                lbl.appendChild(cb);
+            } else {
+                var inp = document.createElement('input');
+                inp.type = 'number';
+                inp.step = String(field.step);
+                inp.value = String(type[field.key]);
+                (function(uk, fk) {
+                    inp.addEventListener('change', function() {
+                        UNIT_TYPES[uk][fk] = parseFloat(this.value) || 0;
+                    });
+                })(unitKey, field.key);
+                lbl.appendChild(inp);
+            }
+            section.appendChild(lbl);
+        }
+        panel.appendChild(section);
+    }
+
+    // Save / Reset buttons
+    var btnRow = document.createElement('div');
+    btnRow.style.cssText = 'margin-top:12px;';
+
+    var saveBtn = document.createElement('button');
+    saveBtn.className = 'dev-btn';
+    saveBtn.style.cssText = 'background:#22aa44;color:#fff;';
+    saveBtn.textContent = '💾 保存';
+    saveBtn.addEventListener('click', function() {
+        saveParams();
+        saveBtn.textContent = '✅ 保存済み';
+        setTimeout(function() { saveBtn.textContent = '💾 保存'; }, 1500);
+    });
+    btnRow.appendChild(saveBtn);
+
+    var resetBtn = document.createElement('button');
+    resetBtn.className = 'dev-btn';
+    resetBtn.style.cssText = 'background:#cc4444;color:#fff;';
+    resetBtn.textContent = '🔄 デフォルトに戻す';
+    resetBtn.addEventListener('click', function() {
+        resetParams();
+        buildDevPanel();
+    });
+    btnRow.appendChild(resetBtn);
+
+    panel.appendChild(btnRow);
 }
 
 // ---- Init ----
-buildUI();
-updateStatus();
-draw();
+buildUI(); updateStatus(); draw();
 </script>
 </body>
 </html>
