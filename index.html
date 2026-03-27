@@ -221,11 +221,16 @@ canvas.height = CANVAS_H;
 var P1 = 1;
 var P2 = 2;
 
+// ---- Unit Types (balanced with unique strengths) ----
+// warrior: fast mover + fast attacker (CD=1), rushdown
+// archer:  longest range (4), safe chip damage
+// tank:    huge HP + 50% damage reduction, immovable wall
+// mage:    splash damage (hits target + all adjacent enemies)
 var UNIT_TYPES = {
-    warrior:  { name: '戦士', emoji: '⚔️', hp: 10, atk: 3, range: 1, speed: 2, desc: '近接・速い' },
-    archer:   { name: '弓兵', emoji: '🏹', hp: 6,  atk: 2, range: 3, speed: 1, desc: '遠距離攻撃' },
-    tank:     { name: '盾兵', emoji: '🛡️', hp: 18, atk: 1, range: 1, speed: 1, desc: '高HP壁役' },
-    mage:     { name: '魔法', emoji: '🧙', hp: 5,  atk: 4, range: 2, speed: 1, desc: '高火力' },
+    warrior: { name: '戦士', emoji: '⚔️', hp: 12, atk: 3, range: 1, speed: 2, cd: 1, def: 0, splash: false, desc: '速攻・連撃' },
+    archer:  { name: '弓兵', emoji: '🏹', hp: 7,  atk: 3, range: 4, speed: 1, cd: 2, def: 0, splash: false, desc: '最長射程' },
+    tank:    { name: '盾兵', emoji: '🛡️', hp: 22, atk: 2, range: 1, speed: 1, cd: 2, def: 0.5, splash: false, desc: '被ダメ半減' },
+    mage:    { name: '魔法', emoji: '🧙', hp: 6,  atk: 2, range: 2, speed: 1, cd: 2, def: 0, splash: true, desc: '範囲攻撃' },
 };
 var MAX_UNITS = 5;
 var FORTRESS_HP = 20;
@@ -244,12 +249,13 @@ var fortresses = {
 };
 var placedCount = { 1: 0, 2: 0 };
 var battleTimer = null;
-var tickInterval = 1200; // slower base speed
+var tickInterval = 1200;
 var tickCount = 0;
 var countdownValue = 0;
+var lastFrameTime = 0;
 
-// Animation: lerp speed (0-1 per frame, smaller = smoother)
-var LERP_SPEED = 0.08;
+// Animation: constant speed (cells per second)
+var MOVE_SPEED = 1.8; // cells per second — smooth constant velocity
 
 // ---- Helpers ----
 function getUnit(x, y) {
@@ -280,8 +286,11 @@ function screenToGrid(clientX, clientY) {
     return { x: x, y: y };
 }
 
-function lerp(a, b, t) {
-    return a + (b - a) * t;
+// Move value toward target at constant speed, return new value
+function moveToward(current, target, maxStep) {
+    var diff = target - current;
+    if (Math.abs(diff) <= maxStep) return target;
+    return current + (diff > 0 ? maxStep : -maxStep);
 }
 
 // ---- Drawing ----
@@ -374,7 +383,6 @@ function drawUnits() {
         if (phase === 'place_p1' && u.player !== P1) continue;
         if (phase === 'place_p2' && u.player !== P2) continue;
 
-        // Use visual position (smoothly interpolated)
         var px = u.vx * CELL + CELL / 2;
         var py = u.vy * CELL + CELL / 2;
         var type = UNIT_TYPES[u.type];
@@ -390,8 +398,26 @@ function drawUnits() {
         ctx.stroke();
         ctx.lineWidth = 1;
 
-        // Emoji with slight bob animation during movement
-        var isMoving = (Math.abs(u.vx - u.x) > 0.05 || Math.abs(u.vy - u.y) > 0.05);
+        // Special indicator for tank (shield glow) and mage (magic aura)
+        if (u.type === 'tank' && phase === 'battle') {
+            ctx.strokeStyle = 'rgba(100,180,255,0.4)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(px, py, CELL * 0.44, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.lineWidth = 1;
+        }
+        if (u.type === 'mage' && phase === 'battle') {
+            ctx.strokeStyle = 'rgba(200,100,255,0.3)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(px, py, CELL * 0.48, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.lineWidth = 1;
+        }
+
+        // Emoji with bob when moving
+        var isMoving = (Math.abs(u.vx - u.x) > 0.02 || Math.abs(u.vy - u.y) > 0.02);
         var bobOffset = 0;
         if (isMoving) {
             bobOffset = Math.sin(Date.now() / 120) * 2;
@@ -408,13 +434,16 @@ function drawUnits() {
         var by = py + CELL * 0.3;
         ctx.fillStyle = '#222';
         ctx.fillRect(bx, by, bw, 4);
-        var hpRatio = u.hp / UNIT_TYPES[u.type].hp;
+        var hpRatio = u.hp / type.hp;
         ctx.fillStyle = hpRatio > 0.5 ? '#44cc44' : hpRatio > 0.25 ? '#ccaa00' : '#ff4444';
         ctx.fillRect(bx, by, bw * hpRatio, 4);
 
         // Attack flash
         if (u.flashTimer > 0) {
-            ctx.fillStyle = 'rgba(255,255,100,' + (u.flashTimer * 0.06) + ')';
+            var flashAlpha = u.flashTimer * 0.04;
+            ctx.fillStyle = u.type === 'mage'
+                ? 'rgba(200,100,255,' + flashAlpha + ')'
+                : 'rgba(255,255,100,' + flashAlpha + ')';
             ctx.beginPath();
             ctx.arc(px, py, CELL * 0.45, 0, Math.PI * 2);
             ctx.fill();
@@ -431,31 +460,38 @@ function drawUnits() {
     }
 }
 
-// ---- Animation Loop (runs every frame) ----
+// ---- Animation Loop (constant-speed movement) ----
 var animRunning = false;
 
 function startAnimLoop() {
     if (animRunning) return;
     animRunning = true;
+    lastFrameTime = performance.now();
     requestAnimationFrame(animFrame);
 }
 
-function animFrame() {
+function animFrame(timestamp) {
     if (!animRunning) return;
 
-    // Interpolate visual positions toward logical positions
-    var anyMoving = false;
+    var dt = (timestamp - lastFrameTime) / 1000; // delta in seconds
+    lastFrameTime = timestamp;
+    // Clamp dt to avoid jumps on tab switch
+    if (dt > 0.1) dt = 0.1;
+
+    var anyAnimating = false;
     for (var i = 0; i < units.length; i++) {
         var u = units[i];
         if (u.hp <= 0) continue;
 
+        // Constant-speed movement toward logical position
+        var step = MOVE_SPEED * dt;
         var dx = u.x - u.vx;
         var dy = u.y - u.vy;
 
-        if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) {
-            u.vx = lerp(u.vx, u.x, LERP_SPEED);
-            u.vy = lerp(u.vy, u.y, LERP_SPEED);
-            anyMoving = true;
+        if (Math.abs(dx) > 0.005 || Math.abs(dy) > 0.005) {
+            u.vx = moveToward(u.vx, u.x, step);
+            u.vy = moveToward(u.vy, u.y, step);
+            anyAnimating = true;
         } else {
             u.vx = u.x;
             u.vy = u.y;
@@ -463,21 +499,20 @@ function animFrame() {
 
         // Decay flash timer
         if (u.flashTimer > 0) {
-            u.flashTimer -= 0.5;
-            anyMoving = true;
+            u.flashTimer = Math.max(0, u.flashTimer - dt * 30);
+            anyAnimating = true;
         }
 
         // Decay damage popup
         if (u.damagePopup > 0) {
-            u.damagePopup -= 0.5;
-            anyMoving = true;
+            u.damagePopup = Math.max(0, u.damagePopup - dt * 25);
+            anyAnimating = true;
         }
     }
 
     draw();
 
-    // Keep running if in battle or something is still animating
-    if (phase === 'battle' || phase === 'countdown' || anyMoving) {
+    if (phase === 'battle' || phase === 'countdown' || anyAnimating) {
         requestAnimationFrame(animFrame);
     } else {
         animRunning = false;
@@ -738,15 +773,39 @@ function battleTick() {
         if (!target) continue;
 
         if (targetDist <= type.range) {
-            // Attack — just update logical state, visual follows via lerp
-            target.hp -= type.atk;
-            u.cooldown = Math.max(1, 3 - type.speed);
+            // Attack — apply damage with defense reduction
+            var dmg = type.atk;
+            var actualDmg = dmg;
+
+            // Tank defense: reduce incoming damage by def ratio
+            if (target.type && UNIT_TYPES[target.type] && UNIT_TYPES[target.type].def > 0) {
+                actualDmg = Math.max(1, Math.ceil(dmg * (1 - UNIT_TYPES[target.type].def)));
+            }
+
+            target.hp -= actualDmg;
+            u.cooldown = type.cd;
             u.flashTimer = 20;
 
-            // Show damage popup on target
             if (target.damagePopup !== undefined) {
                 target.damagePopup = 30;
-                target.lastDamage = type.atk;
+                target.lastDamage = actualDmg;
+            }
+
+            // Mage splash: deal 1 damage to all other enemies adjacent to target
+            if (type.splash && !targetIsFortress) {
+                for (var s = 0; s < aliveUnits.length; s++) {
+                    var su = aliveUnits[s];
+                    if (su.player === u.player || su === target || su.hp <= 0) continue;
+                    if (dist(su, target) <= 1) {
+                        var splashDmg = 1;
+                        if (UNIT_TYPES[su.type] && UNIT_TYPES[su.type].def > 0) {
+                            splashDmg = Math.max(1, Math.ceil(1 * (1 - UNIT_TYPES[su.type].def)));
+                        }
+                        su.hp -= splashDmg;
+                        su.damagePopup = 30;
+                        su.lastDamage = splashDmg;
+                    }
+                }
             }
 
             if (target.hp <= 0 && targetIsFortress) {
