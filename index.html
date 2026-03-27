@@ -146,8 +146,8 @@ var placementUnits = []; // { player, type, x, y }
 var placedCount = { 1: 0, 2: 0 };
 
 // ---- Simulation History ----
-// history[t] = { units: [{id,player,type,x,y,hp,cd},...], forts: {1:{hp},2:{hp}}, events: [...] }
-var history = [];
+// simHistory[t] = { units: [{id,player,type,x,y,hp,cd},...], forts: {1:{hp},2:{hp}}, events: [...] }
+var simHistory = [];
 var winner = 0; // 0=draw, 1=P1, 2=P2
 
 // ---- Playback State ----
@@ -230,7 +230,7 @@ function simulate(initialUnits, fortHp1, fortHp2) {
                     if (forts[target._fort].hp <= 0) {
                         events.push({ type: 'fortress_destroyed', player: target._fort });
                         hist.push(snapshot(units, forts, events));
-                        return { history: hist, winner: u.player };
+                        return { simHistory: hist, winner: u.player };
                     }
                 } else {
                     target.hp -= dmg;
@@ -285,15 +285,15 @@ function simulate(initialUnits, fortHp1, fortHp2) {
         var p1a = false, p2a = false;
         for (var i = 0; i < units.length; i++) { if (units[i].player === P1) p1a = true; if (units[i].player === P2) p2a = true; }
         if (!p1a && !p2a) {
-            if (forts[1].hp > forts[2].hp) return { history: hist, winner: P1 };
-            if (forts[2].hp > forts[1].hp) return { history: hist, winner: P2 };
-            return { history: hist, winner: 0 };
+            if (forts[1].hp > forts[2].hp) return { simHistory: hist, winner: P1 };
+            if (forts[2].hp > forts[1].hp) return { simHistory: hist, winner: P2 };
+            return { simHistory: hist, winner: 0 };
         }
     }
     // Timeout — compare fortress HP
-    if (forts[1].hp > forts[2].hp) return { history: hist, winner: P1 };
-    if (forts[2].hp > forts[1].hp) return { history: hist, winner: P2 };
-    return { history: hist, winner: 0 };
+    if (forts[1].hp > forts[2].hp) return { simHistory: hist, winner: P1 };
+    if (forts[2].hp > forts[1].hp) return { simHistory: hist, winner: P2 };
+    return { simHistory: hist, winner: 0 };
 }
 
 function simMove(u, target, allUnits, forts) {
@@ -436,7 +436,7 @@ function drawUnitAt(vx, vy, player, type, hp, maxHp, flash, bob) {
 // PLAYBACK ENGINE
 // ============================================================
 function initPlayback(hist, win) {
-    history = hist; winner = win;
+    simHistory = hist; winner = win;
     playTurn = 0; playing = false;
     // Init display units from turn 0
     syncDisplayToTurn(0);
@@ -448,7 +448,7 @@ function initPlayback(hist, win) {
 }
 
 function syncDisplayToTurn(t) {
-    var snap = history[t];
+    var snap = simHistory[t];
     displayForts[1].hp = snap.forts[1].hp;
     displayForts[2].hp = snap.forts[2].hp;
     // Build display units — preserve vx/vy if same id exists
@@ -494,9 +494,9 @@ function syncDisplayToTurn(t) {
 }
 
 function jumpToTurn(t) {
-    t = Math.max(0, Math.min(t, history.length - 1));
+    t = Math.max(0, Math.min(t, simHistory.length - 1));
     // For jump (not step), snap positions instantly
-    var snap = history[t];
+    var snap = simHistory[t];
     displayUnits = [];
     for (var i = 0; i < snap.units.length; i++) {
         var su = snap.units[i];
@@ -513,14 +513,14 @@ function jumpToTurn(t) {
 }
 
 function stepForward() {
-    if (playTurn >= history.length - 1) { stopPlay(); showResult(); return; }
+    if (playTurn >= simHistory.length - 1) { stopPlay(); showResult(); return; }
     playTurn++;
     syncDisplayToTurn(playTurn);
     document.getElementById('seek-bar').value = String(playTurn);
     updateTurnLabel();
     updateLog(playTurn);
     startAnimLoop();
-    if (playTurn >= history.length - 1) { stopPlay(); setTimeout(showResult, 800); }
+    if (playTurn >= simHistory.length - 1) { stopPlay(); setTimeout(showResult, 800); }
 }
 
 function stepBackward() {
@@ -530,7 +530,7 @@ function stepBackward() {
 }
 
 function startPlay() {
-    if (playTurn >= history.length - 1) playTurn = 0;
+    if (playTurn >= simHistory.length - 1) playTurn = 0;
     playing = true;
     document.getElementById('pb-play').textContent = '⏸';
     document.getElementById('pb-play').classList.add('active');
@@ -553,7 +553,7 @@ function scheduleNextStep() {
 }
 
 function updateTurnLabel() {
-    document.getElementById('turn-label').textContent = 'ターン ' + playTurn + ' / ' + (history.length - 1);
+    document.getElementById('turn-label').textContent = 'ターン ' + playTurn + ' / ' + (simHistory.length - 1);
     document.getElementById('status').textContent = '⚔️ バトル再生中 (ターン ' + playTurn + ')';
 }
 
@@ -562,7 +562,7 @@ document.getElementById('pb-play').addEventListener('click', function() { if (pl
 document.getElementById('pb-next').addEventListener('click', function() { stopPlay(); stepForward(); });
 document.getElementById('pb-prev').addEventListener('click', function() { stopPlay(); stepBackward(); });
 document.getElementById('pb-start').addEventListener('click', function() { stopPlay(); jumpToTurn(0); });
-document.getElementById('pb-end').addEventListener('click', function() { stopPlay(); jumpToTurn(history.length - 1); setTimeout(showResult, 300); });
+document.getElementById('pb-end').addEventListener('click', function() { stopPlay(); jumpToTurn(simHistory.length - 1); setTimeout(showResult, 300); });
 document.getElementById('seek-bar').addEventListener('input', function() { stopPlay(); jumpToTurn(parseInt(this.value)); });
 document.getElementById('pb-speed').addEventListener('change', function() { playInterval = parseInt(this.value); });
 
@@ -652,7 +652,7 @@ var logOpen = false;
 document.getElementById('log-toggle').addEventListener('click', function() {
     logOpen = !logOpen;
     document.getElementById('turn-log').style.display = logOpen ? 'block' : 'none';
-    if (logOpen && history.length > 0) updateLog(playTurn);
+    if (logOpen && simHistory.length > 0) updateLog(playTurn);
 });
 function updateLog(t) {
     if (!logOpen) return;
@@ -661,7 +661,7 @@ function updateLog(t) {
     var title = document.createElement('h3');
     title.textContent = '📋 ターン ' + t + ' ログ';
     panel.appendChild(title);
-    var snap = history[t];
+    var snap = simHistory[t];
     if (!snap || !snap.events || snap.events.length === 0) {
         var empty = document.createElement('div');
         empty.style.color = '#666';
@@ -746,11 +746,11 @@ document.getElementById('btn-ready').addEventListener('click', function() {
         // Run simulation
         phase = 'battle';
         var result = simulate(placementUnits, FORTRESS_HP, FORTRESS_HP);
-        history = result.history; winner = result.winner;
+        simHistory = result.simHistory; winner = result.winner;
         buildUI(); updateStatus();
         document.getElementById('controls').querySelector('#btn-ready').style.display = 'none';
         document.getElementById('controls').querySelector('#btn-reset').style.display = 'none';
-        initPlayback(history, winner);
+        initPlayback(simHistory, winner);
         startPlay();
     }
 });
@@ -774,7 +774,7 @@ document.getElementById('btn-reset').addEventListener('click', function() {
 function showResult() {
     var t = document.getElementById('result-title'), d = document.getElementById('result-detail');
     if (winner === 0) { t.textContent = '引き分け！'; d.textContent = '両者の拠点が同じHPでした'; }
-    else { t.textContent = (winner === P1 ? '🔵' : '🔴') + ' Player ' + winner + ' の勝利！'; d.textContent = 'ターン ' + (history.length - 1) + ' で決着'; }
+    else { t.textContent = (winner === P1 ? '🔵' : '🔴') + ' Player ' + winner + ' の勝利！'; d.textContent = 'ターン ' + (simHistory.length - 1) + ' で決着'; }
     document.getElementById('result-overlay').style.display = 'flex';
 }
 document.getElementById('btn-replay').addEventListener('click', function() {
@@ -782,7 +782,7 @@ document.getElementById('btn-replay').addEventListener('click', function() {
     document.getElementById('playback').style.display = 'none';
     stopPlay(); animRunning = false;
     phase = 'place_p1'; currentPlayer = P1; selectedType = 'warrior';
-    placementUnits = []; placedCount = { 1: 0, 2: 0 }; history = []; projectiles = []; displayUnits = [];
+    placementUnits = []; placedCount = { 1: 0, 2: 0 }; simHistory = []; projectiles = []; displayUnits = [];
     buildUI(); updateStatus(); drawPlacement();
 });
 
