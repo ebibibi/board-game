@@ -79,11 +79,12 @@
     </div>
     <div id="playback">
         <div id="playback-buttons">
-            <button class="pb-btn" id="pb-start">⏮</button>
-            <button class="pb-btn" id="pb-prev">◀</button>
-            <button class="pb-btn active" id="pb-play">▶</button>
-            <button class="pb-btn" id="pb-next">▶▏</button>
-            <button class="pb-btn" id="pb-end">⏭</button>
+            <button class="pb-btn" id="pb-start">⏮ 最初</button>
+            <button class="pb-btn" id="pb-prev">◀ 1戻す</button>
+            <button class="pb-btn" id="pb-play">▶ 再生</button>
+            <button class="pb-btn" id="pb-pause">⏸ 停止</button>
+            <button class="pb-btn" id="pb-next">1進む ▶</button>
+            <button class="pb-btn" id="pb-end">最後 ⏭</button>
             <select id="pb-speed" style="background:#222;color:#eee;border:1px solid #555;border-radius:4px;padding:4px;">
                 <option value="2000">x0.5</option>
                 <option value="1200" selected>x1.0</option>
@@ -532,15 +533,15 @@ function stepBackward() {
 function startPlay() {
     if (playTurn >= simHistory.length - 1) playTurn = 0;
     playing = true;
-    document.getElementById('pb-play').textContent = '⏸';
-    document.getElementById('pb-play').classList.add('active');
+    document.getElementById('pb-play').classList.remove('active');
+    document.getElementById('pb-pause').classList.add('active');
     startAnimLoop();
     scheduleNextStep();
 }
 function stopPlay() {
     playing = false;
     if (playTimer) { clearTimeout(playTimer); playTimer = null; }
-    document.getElementById('pb-play').textContent = '▶';
+    document.getElementById('pb-pause').classList.remove('active');
     document.getElementById('pb-play').classList.remove('active');
 }
 function scheduleNextStep() {
@@ -558,7 +559,8 @@ function updateTurnLabel() {
 }
 
 // ---- Playback controls ----
-document.getElementById('pb-play').addEventListener('click', function() { if (playing) stopPlay(); else startPlay(); });
+document.getElementById('pb-play').addEventListener('click', function() { if (!playing) startPlay(); });
+document.getElementById('pb-pause').addEventListener('click', function() { if (playing) stopPlay(); });
 document.getElementById('pb-next').addEventListener('click', function() { stopPlay(); stepForward(); });
 document.getElementById('pb-prev').addEventListener('click', function() { stopPlay(); stepBackward(); });
 document.getElementById('pb-start').addEventListener('click', function() { stopPlay(); jumpToTurn(0); });
