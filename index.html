@@ -173,10 +173,27 @@ var MOVE_SPEED = 1.5;
 var PROJ_SPEED = 5.0;
 
 // ============================================================
-// SIMULATION ENGINE (pure, deterministic)
+// SIMULATION ENGINE (pure, deterministic, simultaneous attacks)
 // ============================================================
+function findTarget(u, alive, forts) {
+    var ep = u.player === P1 ? P2 : P1;
+    var target = null, tDist = Infinity;
+    for (var j = 0; j < alive.length; j++) {
+        var e = alive[j];
+        if (e.player === u.player || e.hp <= 0) continue;
+        var d = Math.abs(u.x - e.x) + Math.abs(u.y - e.y);
+        if (d < tDist) { target = e; tDist = d; }
+    }
+    var ef = forts[ep];
+    var fp = ep === P1 ? FORT_P1 : FORT_P2;
+    if (ef.hp > 0) {
+        var d2 = Math.abs(u.x - fp.x) + Math.abs(u.y - fp.y);
+        if (d2 < tDist) { target = { x: fp.x, y: fp.y, hp: ef.hp, _fort: ep }; tDist = d2; }
+    }
+    return { target: target, dist: tDist };
+}
+
 function simulate(initialUnits, fortHp1, fortHp2) {
-    // Deep copy initial state
     var units = [];
     for (var i = 0; i < initialUnits.length; i++) {
         var u = initialUnits[i];
@@ -185,101 +202,118 @@ function simulate(initialUnits, fortHp1, fortHp2) {
     }
     var forts = { 1: { hp: fortHp1 }, 2: { hp: fortHp2 } };
     var hist = [];
-
-    // Record turn 0 (initial state)
     hist.push(snapshot(units, forts, []));
 
     for (var turn = 1; turn <= MAX_TURN; turn++) {
         var events = [];
-        // Sort units deterministically: by id (stable)
         var alive = [];
         for (var i = 0; i < units.length; i++) { if (units[i].hp > 0) alive.push(units[i]); }
 
-        // Process P1 first, then P2, each sorted by id — deterministic order
+        // Deterministic order: P1 by id, then P2 by id
         var order = alive.slice().sort(function(a, b) {
             if (a.player !== b.player) return a.player - b.player;
             return a.id - b.id;
         });
 
+        // === CD DECREMENT (units on cooldown skip this turn) ===
+        var cdSkip = {};
+        for (var i = 0; i < order.length; i++) {
+            if (order[i].cd > 0) { order[i].cd--; cdSkip[order[i].id] = true; }
+        }
+
+        // === MOVE PHASE (sequential for collision avoidance) ===
+        var movedSet = {};
         for (var i = 0; i < order.length; i++) {
             var u = order[i];
-            if (u.hp <= 0) continue; // might have died this turn
-            if (u.cd > 0) { u.cd--; continue; }
-
+            if (u.hp <= 0 || cdSkip[u.id]) continue;
+            var res = findTarget(u, alive, forts);
+            if (!res.target) continue;
             var type = UNIT_TYPES[u.type];
-            var ep = u.player === P1 ? P2 : P1;
-
-            // Find nearest target (enemy unit, then enemy fortress)
-            var target = null, tDist = Infinity, tFort = false;
-            for (var j = 0; j < alive.length; j++) {
-                var e = alive[j];
-                if (e.player === u.player || e.hp <= 0) continue;
-                var d = Math.abs(u.x - e.x) + Math.abs(u.y - e.y);
-                if (d < tDist) { target = e; tDist = d; tFort = false; }
-            }
-            var ef = forts[ep];
-            var fp = ep === P1 ? FORT_P1 : FORT_P2;
-            if (ef.hp > 0) {
-                var d2 = Math.abs(u.x - fp.x) + Math.abs(u.y - fp.y);
-                if (d2 < tDist) { target = { x: fp.x, y: fp.y, hp: ef.hp, _fort: ep }; tDist = d2; tFort = true; }
-            }
-            if (!target) continue;
-
-            if (tDist <= type.range) {
-                // ATTACK
-                var dmg = type.atk;
-                if (!tFort && UNIT_TYPES[target.type] && UNIT_TYPES[target.type].def > 0) {
-                    dmg = Math.max(1, Math.ceil(type.atk * (1 - UNIT_TYPES[target.type].def)));
-                }
-                if (tFort) {
-                    forts[target._fort].hp -= dmg;
-                    events.push({ type: 'attack', from: u.id, toFort: target._fort, dmg: dmg,
-                                  fx: u.x, fy: u.y, tx: target.x, ty: target.y, range: type.range, unitType: u.type });
-                    if (forts[target._fort].hp <= 0) {
-                        events.push({ type: 'fortress_destroyed', player: target._fort });
-                        hist.push(snapshot(units, forts, events));
-                        return { simHistory: hist, winner: u.player };
-                    }
-                } else {
-                    target.hp -= dmg;
-                    events.push({ type: 'attack', from: u.id, to: target.id, dmg: dmg,
-                                  fx: u.x, fy: u.y, tx: target.x, ty: target.y, range: type.range, unitType: u.type });
-                    if (target.hp <= 0) {
-                        events.push({ type: 'death', unitId: target.id });
-                    }
-                    // Splash
-                    if (type.splash) {
-                        for (var s = 0; s < alive.length; s++) {
-                            var su = alive[s];
-                            if (su.player === u.player || su === target || su.hp <= 0) continue;
-                            if (Math.abs(su.x - target.x) + Math.abs(su.y - target.y) <= 1) {
-                                var sd = 1;
-                                if (UNIT_TYPES[su.type] && UNIT_TYPES[su.type].def > 0) sd = Math.max(1, Math.ceil(1 * (1 - UNIT_TYPES[su.type].def)));
-                                su.hp -= sd;
-                                events.push({ type: 'splash', from: u.id, to: su.id, dmg: sd, tx: su.x, ty: su.y });
-                                if (su.hp <= 0) events.push({ type: 'death', unitId: su.id });
-                            }
-                        }
-                    }
-                }
-                u.cd = type.cd;
-            } else {
-                // MOVE toward target
+            if (res.dist > type.range) {
                 var ox = u.x, oy = u.y;
-                simMove(u, target, units, forts);
+                simMove(u, res.target, units, forts);
                 if (u.x !== ox || u.y !== oy) {
                     events.push({ type: 'move', unitId: u.id, from: { x: ox, y: oy }, to: { x: u.x, y: u.y } });
+                    movedSet[u.id] = true;
                 }
-                // Second move for speed >= 2
                 if (type.speed >= 2) {
                     var ox2 = u.x, oy2 = u.y;
-                    simMove(u, target, units, forts);
+                    simMove(u, res.target, units, forts);
                     if (u.x !== ox2 || u.y !== oy2) {
                         events.push({ type: 'move', unitId: u.id, from: { x: ox2, y: oy2 }, to: { x: u.x, y: u.y } });
+                        movedSet[u.id] = true;
                     }
                 }
-                u.cd = 0;
             }
+        }
+
+        // === ATTACK PHASE (simultaneous — queue all, then apply) ===
+        var pending = [];
+        for (var i = 0; i < order.length; i++) {
+            var u = order[i];
+            if (u.hp <= 0 || cdSkip[u.id] || movedSet[u.id]) continue;
+            var res = findTarget(u, alive, forts);
+            if (!res.target) continue;
+            var type = UNIT_TYPES[u.type];
+            if (res.dist > type.range) continue;
+
+            var isFort = !!res.target._fort;
+            var dmg = type.atk;
+            if (!isFort && UNIT_TYPES[res.target.type] && UNIT_TYPES[res.target.type].def > 0) {
+                dmg = Math.max(1, Math.ceil(type.atk * (1 - UNIT_TYPES[res.target.type].def)));
+            }
+            pending.push({ attacker: u, target: res.target, dmg: dmg, isFort: isFort,
+                           fortPlayer: isFort ? res.target._fort : 0,
+                           fx: u.x, fy: u.y, tx: res.target.x, ty: res.target.y,
+                           range: type.range, unitType: u.type, isSplash: false });
+            u.cd = type.cd;
+
+            // Queue splash
+            if (type.splash && !isFort) {
+                for (var s = 0; s < alive.length; s++) {
+                    var su = alive[s];
+                    if (su.player === u.player || su === res.target || su.hp <= 0) continue;
+                    if (Math.abs(su.x - res.target.x) + Math.abs(su.y - res.target.y) <= 1) {
+                        var sd = 1;
+                        if (UNIT_TYPES[su.type] && UNIT_TYPES[su.type].def > 0) sd = Math.max(1, Math.ceil(1 * (1 - UNIT_TYPES[su.type].def)));
+                        pending.push({ attacker: u, target: su, dmg: sd, isFort: false,
+                                       fortPlayer: 0, fx: u.x, fy: u.y, tx: su.x, ty: su.y,
+                                       range: 0, unitType: u.type, isSplash: true });
+                    }
+                }
+            }
+        }
+
+        // Apply all damage simultaneously
+        for (var i = 0; i < pending.length; i++) {
+            var pa = pending[i];
+            if (pa.isFort) {
+                forts[pa.fortPlayer].hp -= pa.dmg;
+                events.push({ type: 'attack', from: pa.attacker.id, toFort: pa.fortPlayer, dmg: pa.dmg,
+                              fx: pa.fx, fy: pa.fy, tx: pa.tx, ty: pa.ty, range: pa.range, unitType: pa.unitType });
+            } else if (pa.isSplash) {
+                pa.target.hp -= pa.dmg;
+                events.push({ type: 'splash', from: pa.attacker.id, to: pa.target.id, dmg: pa.dmg, tx: pa.tx, ty: pa.ty });
+            } else {
+                pa.target.hp -= pa.dmg;
+                events.push({ type: 'attack', from: pa.attacker.id, to: pa.target.id, dmg: pa.dmg,
+                              fx: pa.fx, fy: pa.fy, tx: pa.tx, ty: pa.ty, range: pa.range, unitType: pa.unitType });
+            }
+        }
+
+        // Death events (after all damage applied)
+        for (var i = 0; i < alive.length; i++) {
+            if (alive[i].hp <= 0) events.push({ type: 'death', unitId: alive[i].id });
+        }
+
+        // Check fortress destruction (both can fall simultaneously = draw)
+        var f1dead = forts[1].hp <= 0, f2dead = forts[2].hp <= 0;
+        if (f1dead) events.push({ type: 'fortress_destroyed', player: 1 });
+        if (f2dead) events.push({ type: 'fortress_destroyed', player: 2 });
+        if (f1dead || f2dead) {
+            hist.push(snapshot(units, forts, events));
+            if (f1dead && f2dead) return { simHistory: hist, winner: 0 };
+            return { simHistory: hist, winner: f1dead ? P2 : P1 };
         }
 
         // Remove dead
@@ -298,7 +332,6 @@ function simulate(initialUnits, fortHp1, fortHp2) {
             return { simHistory: hist, winner: 0 };
         }
     }
-    // Timeout — compare fortress HP
     if (forts[1].hp > forts[2].hp) return { simHistory: hist, winner: P1 };
     if (forts[2].hp > forts[1].hp) return { simHistory: hist, winner: P2 };
     return { simHistory: hist, winner: 0 };
