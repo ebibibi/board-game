@@ -3,24 +3,665 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Board Game</title>
+    <title>Fortress Clash — オリジナルボードゲーム</title>
     <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            background: #1a1a2e;
+            background: #0f0f1a;
             color: #eee;
             font-family: 'Segoe UI', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
         }
+
         h1 {
-            font-size: 2rem;
+            margin: 16px 0 4px;
+            font-size: 1.6rem;
+            letter-spacing: 2px;
         }
+
+        #status {
+            font-size: 1rem;
+            margin-bottom: 8px;
+            color: #aaa;
+            min-height: 1.4em;
+        }
+
+        canvas {
+            border: 2px solid #333;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        #ui {
+            display: flex;
+            gap: 16px;
+            margin: 12px 0;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .unit-btn {
+            padding: 10px 16px;
+            border: 2px solid #555;
+            border-radius: 8px;
+            background: #1a1a2e;
+            color: #eee;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.15s;
+            user-select: none;
+        }
+        .unit-btn:hover { border-color: #888; background: #252540; }
+        .unit-btn.selected { border-color: #ffcc00; background: #2a2a45; }
+
+        .action-btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.15s;
+        }
+        .action-btn:hover { filter: brightness(1.2); }
+        .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        #btn-ready { background: #22aa44; color: #fff; }
+        #btn-start { background: #cc4444; color: #fff; display: none; }
+        #btn-reset { background: #555; color: #fff; }
+
+        #controls {
+            display: flex;
+            gap: 12px;
+            margin: 8px 0 16px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        #info {
+            display: flex;
+            gap: 32px;
+            font-size: 0.95rem;
+            margin-bottom: 8px;
+        }
+        .player-info { padding: 6px 16px; border-radius: 6px; }
+        .p1-info { background: rgba(68, 136, 255, 0.2); border: 1px solid #4488ff; }
+        .p2-info { background: rgba(255, 68, 68, 0.2); border: 1px solid #ff4444; }
+
+        #speed-control {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            margin: 4px 0;
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+        #speed-control input { width: 100px; }
+
+        #result-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        #result-box {
+            background: #1a1a2e;
+            border: 2px solid #ffcc00;
+            border-radius: 16px;
+            padding: 40px 60px;
+            text-align: center;
+        }
+        #result-box h2 { font-size: 2rem; margin-bottom: 12px; }
+        #result-box p { font-size: 1.1rem; color: #aaa; margin-bottom: 20px; }
     </style>
 </head>
 <body>
-    <h1>🎲 Board Game — Coming Soon</h1>
+    <h1>⚔️ Fortress Clash</h1>
+    <div id="status">Player 1: 配置してください</div>
+
+    <div id="info">
+        <div class="player-info p1-info">🔵 P1 拠点 HP: <span id="p1-hp">20</span></div>
+        <div class="player-info p2-info">🔴 P2 拠点 HP: <span id="p2-hp">20</span></div>
+    </div>
+
+    <div id="board-container">
+        <canvas id="canvas" width="640" height="512"></canvas>
+    </div>
+
+    <div id="ui"></div>
+    <div id="controls">
+        <button class="action-btn" id="btn-ready">配置完了 ✓</button>
+        <button class="action-btn" id="btn-start">バトル開始！⚔️</button>
+        <button class="action-btn" id="btn-reset">リセット 🔄</button>
+    </div>
+    <div id="speed-control">
+        <label>速度:</label>
+        <input type="range" id="speed" min="1" max="5" value="3">
+        <span id="speed-label">x1.0</span>
+    </div>
+
+    <div id="result-overlay">
+        <div id="result-box">
+            <h2 id="result-title"></h2>
+            <p id="result-detail"></p>
+            <button class="action-btn" id="btn-replay" style="background:#ffcc00;color:#000;">もう一回遊ぶ</button>
+        </div>
+    </div>
+
+<script>
+// ============================================================
+// Fortress Clash — Browser Board Game
+// ============================================================
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+const COLS = 10;
+const ROWS = 8;
+const CELL = 64;
+canvas.width = COLS * CELL;
+canvas.height = ROWS * CELL;
+
+const P1 = 1;
+const P2 = 2;
+
+const UNIT_TYPES = {
+    warrior:  { name: '戦士', emoji: '⚔️', hp: 10, atk: 3, range: 1, speed: 2, color: '#ffaa00', desc: '近接攻撃' },
+    archer:   { name: '弓兵', emoji: '🏹', hp: 6,  atk: 2, range: 3, speed: 1, color: '#44cc44', desc: '遠距離攻撃' },
+    tank:     { name: '盾兵', emoji: '🛡️', hp: 18, atk: 1, range: 1, speed: 1, color: '#4488ff', desc: '高HP壁役' },
+    mage:     { name: '魔法', emoji: '🧙', hp: 5,  atk: 4, range: 2, speed: 1, color: '#cc44ff', desc: '高火力' },
+};
+const MAX_UNITS = 5;
+const FORTRESS_HP = 20;
+
+// ---- Game State ----
+let phase = 'place_p1';
+let currentPlayer = P1;
+let selectedType = 'warrior';
+let units = [];
+let fortresses = [
+    null,
+    { player: P1, x: 0, y: 3, hp: FORTRESS_HP, maxHp: FORTRESS_HP },
+    { player: P2, x: 9, y: 4, hp: FORTRESS_HP, maxHp: FORTRESS_HP },
+];
+let placedCount = { 1: 0, 2: 0 };
+let battleTimer = null;
+let tickInterval = 300;
+let tickCount = 0;
+
+// ---- Helpers ----
+function getUnit(x, y) { return units.find(u => u.x === x && u.y === y && u.hp > 0); }
+function getFortress(x, y) { return fortresses.find(f => f && f.x === x && f.y === y); }
+function dist(a, b) { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
+
+function isPlacementZone(x, y, player) {
+    if (player === P1) return x >= 0 && x <= 2;
+    return x >= 7 && x <= 9;
+}
+
+// ---- Drawing ----
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawGrid();
+    drawFortresses();
+    drawUnits();
+    drawHoverInfo();
+}
+
+function drawGrid() {
+    for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+            const px = x * CELL;
+            const py = y * CELL;
+
+            let bg = '#16162a';
+            if (phase === 'place_p1' && isPlacementZone(x, y, P1)) bg = '#1a2244';
+            else if (phase === 'place_p2' && isPlacementZone(x, y, P2)) bg = '#2a1a1a';
+            else if (x <= 2) bg = '#141430';
+            else if (x >= 7) bg = '#1e1418';
+            else bg = '#18181e';
+
+            ctx.fillStyle = bg;
+            ctx.fillRect(px, py, CELL, CELL);
+            ctx.strokeStyle = '#2a2a3a';
+            ctx.strokeRect(px, py, CELL, CELL);
+        }
+    }
+
+    ctx.strokeStyle = '#444';
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(5 * CELL, 0);
+    ctx.lineTo(5 * CELL, ROWS * CELL);
+    ctx.stroke();
+    ctx.setLineDash([]);
+}
+
+function drawFortresses() {
+    for (let i = 1; i <= 2; i++) {
+        const f = fortresses[i];
+        if (!f) continue;
+        const px = f.x * CELL + CELL / 2;
+        const py = f.y * CELL + CELL / 2;
+
+        ctx.shadowColor = i === P1 ? '#4488ff' : '#ff4444';
+        ctx.shadowBlur = f.hp > 0 ? 12 : 0;
+
+        ctx.fillStyle = f.hp > 0 ? (i === P1 ? '#335599' : '#993333') : '#333';
+        ctx.beginPath();
+        ctx.arc(px, py, CELL * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+
+        ctx.font = '24px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🏰', px, py - 2);
+
+        if (f.hp > 0) {
+            const bw = CELL * 0.7;
+            const bx = px - bw / 2;
+            const by = py + CELL * 0.32;
+            ctx.fillStyle = '#333';
+            ctx.fillRect(bx, by, bw, 5);
+            ctx.fillStyle = f.hp / f.maxHp > 0.3 ? '#44cc44' : '#ff4444';
+            ctx.fillRect(bx, by, bw * (f.hp / f.maxHp), 5);
+        }
+    }
+}
+
+function drawUnits() {
+    for (const u of units) {
+        if (u.hp <= 0) continue;
+        const px = u.x * CELL + CELL / 2;
+        const py = u.y * CELL + CELL / 2;
+        const type = UNIT_TYPES[u.type];
+
+        ctx.fillStyle = u.player === P1 ? 'rgba(68,136,255,0.3)' : 'rgba(255,68,68,0.3)';
+        ctx.beginPath();
+        ctx.arc(px, py, CELL * 0.38, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = u.player === P1 ? '#4488ff' : '#ff4444';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.lineWidth = 1;
+
+        ctx.font = '22px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(type.emoji, px, py - 2);
+
+        const bw = CELL * 0.6;
+        const bx = px - bw / 2;
+        const by = py + CELL * 0.3;
+        ctx.fillStyle = '#222';
+        ctx.fillRect(bx, by, bw, 4);
+        const hpRatio = u.hp / UNIT_TYPES[u.type].hp;
+        ctx.fillStyle = hpRatio > 0.5 ? '#44cc44' : hpRatio > 0.25 ? '#ccaa00' : '#ff4444';
+        ctx.fillRect(bx, by, bw * hpRatio, 4);
+
+        if (u.flashTimer > 0) {
+            ctx.fillStyle = 'rgba(255,255,100,' + (u.flashTimer * 0.15) + ')';
+            ctx.beginPath();
+            ctx.arc(px, py, CELL * 0.42, 0, Math.PI * 2);
+            ctx.fill();
+            u.flashTimer--;
+        }
+    }
+}
+
+let hoverCell = null;
+function drawHoverInfo() {
+    if (!hoverCell) return;
+    const { x, y } = hoverCell;
+
+    if ((phase === 'place_p1' || phase === 'place_p2') &&
+        isPlacementZone(x, y, currentPlayer) &&
+        !getUnit(x, y) && !getFortress(x, y)) {
+        ctx.fillStyle = 'rgba(255,204,0,0.15)';
+        ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+    }
+}
+
+// ---- UI Building (safe DOM methods) ----
+function buildUI() {
+    const uiEl = document.getElementById('ui');
+    while (uiEl.firstChild) uiEl.removeChild(uiEl.firstChild);
+
+    if (phase !== 'place_p1' && phase !== 'place_p2') {
+        uiEl.style.display = 'none';
+        return;
+    }
+    uiEl.style.display = 'flex';
+
+    const remaining = MAX_UNITS - placedCount[currentPlayer];
+
+    for (const [key, type] of Object.entries(UNIT_TYPES)) {
+        const btn = document.createElement('button');
+        btn.className = 'unit-btn' + (key === selectedType ? ' selected' : '');
+
+        const nameSpan = document.createTextNode(type.emoji + ' ' + type.name);
+        btn.appendChild(nameSpan);
+        btn.appendChild(document.createElement('br'));
+
+        const descSpan = document.createElement('span');
+        descSpan.style.cssText = 'font-size:0.8rem;color:#aaa;';
+        descSpan.textContent = type.desc;
+        btn.appendChild(descSpan);
+
+        btn.addEventListener('click', () => { selectedType = key; buildUI(); });
+        uiEl.appendChild(btn);
+    }
+
+    const countEl = document.createElement('div');
+    countEl.style.cssText = 'display:flex;align-items:center;font-size:1rem;color:#ffcc00;';
+    countEl.textContent = '残り ' + remaining + ' 体';
+    uiEl.appendChild(countEl);
+}
+
+function updateStatus() {
+    const el = document.getElementById('status');
+    const p1hp = document.getElementById('p1-hp');
+    const p2hp = document.getElementById('p2-hp');
+    p1hp.textContent = String(Math.max(0, fortresses[1].hp));
+    p2hp.textContent = String(Math.max(0, fortresses[2].hp));
+
+    const readyBtn = document.getElementById('btn-ready');
+    const startBtn = document.getElementById('btn-start');
+    const speedCtrl = document.getElementById('speed-control');
+
+    switch (phase) {
+        case 'place_p1':
+            el.textContent = '🔵 Player 1: キャラを配置してください（残り ' + (MAX_UNITS - placedCount[1]) + ' 体）';
+            readyBtn.style.display = '';
+            readyBtn.disabled = placedCount[1] === 0;
+            startBtn.style.display = 'none';
+            speedCtrl.style.display = 'none';
+            break;
+        case 'place_p2':
+            el.textContent = '🔴 Player 2: キャラを配置してください（残り ' + (MAX_UNITS - placedCount[2]) + ' 体）';
+            readyBtn.style.display = '';
+            readyBtn.disabled = placedCount[2] === 0;
+            startBtn.style.display = 'none';
+            speedCtrl.style.display = 'none';
+            break;
+        case 'ready':
+            el.textContent = '両プレイヤー配置完了！バトル開始？';
+            readyBtn.style.display = 'none';
+            startBtn.style.display = '';
+            speedCtrl.style.display = 'none';
+            break;
+        case 'battle':
+            el.textContent = '⚔️ バトル中！ (ターン ' + tickCount + ')';
+            readyBtn.style.display = 'none';
+            startBtn.style.display = 'none';
+            speedCtrl.style.display = 'flex';
+            break;
+        case 'ended':
+            readyBtn.style.display = 'none';
+            startBtn.style.display = 'none';
+            speedCtrl.style.display = 'none';
+            break;
+    }
+}
+
+// ---- Placement ----
+canvas.addEventListener('click', function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.floor((e.clientX - rect.left) / CELL);
+    const y = Math.floor((e.clientY - rect.top) / CELL);
+
+    if (phase !== 'place_p1' && phase !== 'place_p2') return;
+    if (placedCount[currentPlayer] >= MAX_UNITS) return;
+    if (!isPlacementZone(x, y, currentPlayer)) return;
+    if (getUnit(x, y) || getFortress(x, y)) return;
+
+    units.push({
+        player: currentPlayer,
+        type: selectedType,
+        x: x, y: y,
+        hp: UNIT_TYPES[selectedType].hp,
+        cooldown: 0,
+        flashTimer: 0,
+    });
+    placedCount[currentPlayer]++;
+    buildUI();
+    updateStatus();
+    draw();
+});
+
+canvas.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.floor((e.clientX - rect.left) / CELL);
+    const y = Math.floor((e.clientY - rect.top) / CELL);
+
+    if (phase !== 'place_p1' && phase !== 'place_p2') return;
+
+    const idx = units.findIndex(u => u.x === x && u.y === y && u.player === currentPlayer);
+    if (idx >= 0) {
+        units.splice(idx, 1);
+        placedCount[currentPlayer]--;
+        buildUI();
+        updateStatus();
+        draw();
+    }
+});
+
+canvas.addEventListener('mousemove', function(e) {
+    const rect = canvas.getBoundingClientRect();
+    hoverCell = {
+        x: Math.floor((e.clientX - rect.left) / CELL),
+        y: Math.floor((e.clientY - rect.top) / CELL),
+    };
+    if (phase === 'place_p1' || phase === 'place_p2') draw();
+});
+
+// ---- Ready / Start ----
+document.getElementById('btn-ready').addEventListener('click', function() {
+    if (phase === 'place_p1') {
+        phase = 'place_p2';
+        currentPlayer = P2;
+        selectedType = 'warrior';
+        buildUI();
+        updateStatus();
+        draw();
+    } else if (phase === 'place_p2') {
+        phase = 'ready';
+        buildUI();
+        updateStatus();
+        draw();
+    }
+});
+
+document.getElementById('btn-start').addEventListener('click', startBattle);
+document.getElementById('btn-replay').addEventListener('click', resetGame);
+document.getElementById('btn-reset').addEventListener('click', resetGame);
+
+// ---- Speed ----
+document.getElementById('speed').addEventListener('input', function(e) {
+    const v = parseInt(e.target.value);
+    var speeds = { 1: 600, 2: 400, 3: 300, 4: 150, 5: 80 };
+    var labels = { 1: 'x0.5', 2: 'x0.75', 3: 'x1.0', 4: 'x2.0', 5: 'x4.0' };
+    tickInterval = speeds[v];
+    document.getElementById('speed-label').textContent = labels[v];
+    if (battleTimer) {
+        clearInterval(battleTimer);
+        battleTimer = setInterval(battleTick, tickInterval);
+    }
+});
+
+// ---- Battle Logic ----
+function startBattle() {
+    phase = 'battle';
+    tickCount = 0;
+    buildUI();
+    updateStatus();
+    battleTimer = setInterval(battleTick, tickInterval);
+}
+
+function battleTick() {
+    tickCount++;
+
+    var aliveUnits = units.filter(u => u.hp > 0);
+
+    for (var i = 0; i < aliveUnits.length; i++) {
+        var u = aliveUnits[i];
+        if (u.cooldown > 0) { u.cooldown--; continue; }
+
+        var type = UNIT_TYPES[u.type];
+        var enemyPlayer = u.player === P1 ? P2 : P1;
+
+        // Find nearest target
+        var target = null;
+        var targetDist = Infinity;
+        var targetIsFortress = false;
+
+        for (var j = 0; j < aliveUnits.length; j++) {
+            var e = aliveUnits[j];
+            if (e.player === u.player) continue;
+            var d = dist(u, e);
+            if (d < targetDist) { target = e; targetDist = d; targetIsFortress = false; }
+        }
+
+        var ef = fortresses[enemyPlayer];
+        if (ef && ef.hp > 0) {
+            var d2 = dist(u, ef);
+            if (d2 < targetDist) { target = ef; targetDist = d2; targetIsFortress = true; }
+        }
+
+        if (!target) continue;
+
+        if (targetDist <= type.range) {
+            // Attack
+            target.hp -= type.atk;
+            u.cooldown = Math.max(1, 3 - type.speed);
+            u.flashTimer = 3;
+
+            if (target.hp <= 0 && targetIsFortress) {
+                endGame(u.player);
+                return;
+            }
+        } else {
+            // Move toward target
+            var dx = Math.sign(target.x - u.x);
+            var dy = Math.sign(target.y - u.y);
+
+            var moves = [];
+            var candidates = [
+                { x: u.x + dx, y: u.y },
+                { x: u.x, y: u.y + dy },
+                { x: u.x + dx, y: u.y + dy },
+            ];
+            for (var k = 0; k < candidates.length; k++) {
+                var m = candidates[k];
+                if (m.x >= 0 && m.x < COLS && m.y >= 0 && m.y < ROWS &&
+                    !getUnit(m.x, m.y) && !getFortress(m.x, m.y)) {
+                    moves.push(m);
+                }
+            }
+
+            if (moves.length > 0) {
+                u.x = moves[0].x;
+                u.y = moves[0].y;
+            }
+
+            // Fast units move again
+            if (type.speed >= 2 && moves.length > 0) {
+                var dx2 = Math.sign(target.x - u.x);
+                var dy2 = Math.sign(target.y - u.y);
+                var moves2 = [];
+                var cands2 = [
+                    { x: u.x + dx2, y: u.y },
+                    { x: u.x, y: u.y + dy2 },
+                ];
+                for (var k2 = 0; k2 < cands2.length; k2++) {
+                    var m2 = cands2[k2];
+                    if (m2.x >= 0 && m2.x < COLS && m2.y >= 0 && m2.y < ROWS &&
+                        !getUnit(m2.x, m2.y) && !getFortress(m2.x, m2.y)) {
+                        moves2.push(m2);
+                    }
+                }
+                if (moves2.length > 0) {
+                    u.x = moves2[0].x;
+                    u.y = moves2[0].y;
+                }
+            }
+
+            u.cooldown = 0;
+        }
+    }
+
+    // Remove dead units
+    units = units.filter(u => u.hp > 0);
+
+    // Check if all units of one side are dead
+    var p1alive = units.some(u => u.player === P1);
+    var p2alive = units.some(u => u.player === P2);
+    if (!p1alive && !p2alive) {
+        if (fortresses[1].hp > fortresses[2].hp) endGame(P1);
+        else if (fortresses[2].hp > fortresses[1].hp) endGame(P2);
+        else endGame(0);
+        return;
+    }
+
+    updateStatus();
+    draw();
+}
+
+function endGame(winner) {
+    phase = 'ended';
+    clearInterval(battleTimer);
+    battleTimer = null;
+
+    var title = document.getElementById('result-title');
+    var detail = document.getElementById('result-detail');
+
+    if (winner === 0) {
+        title.textContent = '引き分け！';
+        detail.textContent = '両者の拠点が同じHPでした';
+    } else {
+        var color = winner === P1 ? '🔵' : '🔴';
+        title.textContent = color + ' Player ' + winner + ' の勝利！';
+        detail.textContent = 'ターン ' + tickCount + ' で決着';
+    }
+
+    document.getElementById('result-overlay').style.display = 'flex';
+    updateStatus();
+    draw();
+}
+
+function resetGame() {
+    clearInterval(battleTimer);
+    battleTimer = null;
+    phase = 'place_p1';
+    currentPlayer = P1;
+    selectedType = 'warrior';
+    units = [];
+    placedCount = { 1: 0, 2: 0 };
+    tickCount = 0;
+    fortresses[1].hp = FORTRESS_HP;
+    fortresses[2].hp = FORTRESS_HP;
+    document.getElementById('result-overlay').style.display = 'none';
+    buildUI();
+    updateStatus();
+    draw();
+}
+
+// ---- Init ----
+buildUI();
+updateStatus();
+draw();
+</script>
 </body>
 </html>
