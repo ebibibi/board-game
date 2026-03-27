@@ -72,7 +72,6 @@
         .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
         #btn-ready { background: #22aa44; color: #fff; }
-        #btn-start { background: #cc4444; color: #fff; display: none; }
         #btn-reset { background: #555; color: #fff; }
 
         #controls {
@@ -102,6 +101,21 @@
             color: #aaa;
         }
         #speed-control input { width: 100px; }
+
+        /* Handover overlay — blocks screen between players */
+        #handover-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #0f0f1a;
+            justify-content: center;
+            align-items: center;
+            z-index: 90;
+            flex-direction: column;
+            gap: 20px;
+        }
+        #handover-overlay h2 { font-size: 2rem; }
+        #handover-overlay p { font-size: 1.1rem; color: #aaa; }
 
         #result-overlay {
             display: none;
@@ -139,13 +153,19 @@
     <div id="ui"></div>
     <div id="controls">
         <button class="action-btn" id="btn-ready">配置完了 ✓</button>
-        <button class="action-btn" id="btn-start">バトル開始！⚔️</button>
         <button class="action-btn" id="btn-reset">リセット 🔄</button>
     </div>
     <div id="speed-control">
         <label>速度:</label>
         <input type="range" id="speed" min="1" max="5" value="3">
         <span id="speed-label">x1.0</span>
+    </div>
+
+    <!-- Handover screen between P1 and P2 -->
+    <div id="handover-overlay">
+        <h2 id="handover-title"></h2>
+        <p id="handover-desc"></p>
+        <button class="action-btn" id="btn-handover" style="background:#ffcc00;color:#000;font-size:1.2rem;padding:14px 40px;">準備OK</button>
     </div>
 
     <div id="result-overlay">
@@ -161,45 +181,59 @@
 // Fortress Clash — Browser Board Game
 // ============================================================
 
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
+var canvas = document.getElementById('canvas');
+var ctx = canvas.getContext('2d');
 
-const COLS = 10;
-const ROWS = 8;
-const CELL = 64;
+var COLS = 10;
+var ROWS = 8;
+var CELL = 64;
 canvas.width = COLS * CELL;
 canvas.height = ROWS * CELL;
 
-const P1 = 1;
-const P2 = 2;
+var P1 = 1;
+var P2 = 2;
 
-const UNIT_TYPES = {
-    warrior:  { name: '戦士', emoji: '⚔️', hp: 10, atk: 3, range: 1, speed: 2, color: '#ffaa00', desc: '近接攻撃' },
-    archer:   { name: '弓兵', emoji: '🏹', hp: 6,  atk: 2, range: 3, speed: 1, color: '#44cc44', desc: '遠距離攻撃' },
-    tank:     { name: '盾兵', emoji: '🛡️', hp: 18, atk: 1, range: 1, speed: 1, color: '#4488ff', desc: '高HP壁役' },
-    mage:     { name: '魔法', emoji: '🧙', hp: 5,  atk: 4, range: 2, speed: 1, color: '#cc44ff', desc: '高火力' },
+var UNIT_TYPES = {
+    warrior:  { name: '戦士', emoji: '⚔️', hp: 10, atk: 3, range: 1, speed: 2, desc: '近接・速い' },
+    archer:   { name: '弓兵', emoji: '🏹', hp: 6,  atk: 2, range: 3, speed: 1, desc: '遠距離攻撃' },
+    tank:     { name: '盾兵', emoji: '🛡️', hp: 18, atk: 1, range: 1, speed: 1, desc: '高HP壁役' },
+    mage:     { name: '魔法', emoji: '🧙', hp: 5,  atk: 4, range: 2, speed: 1, desc: '高火力' },
 };
-const MAX_UNITS = 5;
-const FORTRESS_HP = 20;
+var MAX_UNITS = 5;
+var FORTRESS_HP = 20;
+
+// P1 fortress: left side center, P2 fortress: right side center
+var FORTRESS_P1 = { x: 0, y: 3 };
+var FORTRESS_P2 = { x: 9, y: 4 };
 
 // ---- Game State ----
-let phase = 'place_p1';
-let currentPlayer = P1;
-let selectedType = 'warrior';
-let units = [];
-let fortresses = [
-    null,
-    { player: P1, x: 0, y: 3, hp: FORTRESS_HP, maxHp: FORTRESS_HP },
-    { player: P2, x: 9, y: 4, hp: FORTRESS_HP, maxHp: FORTRESS_HP },
-];
-let placedCount = { 1: 0, 2: 0 };
-let battleTimer = null;
-let tickInterval = 300;
-let tickCount = 0;
+var phase = 'place_p1'; // place_p1, handover, place_p2, countdown, battle, ended
+var currentPlayer = P1;
+var selectedType = 'warrior';
+var units = [];
+var fortresses = {
+    1: { player: P1, x: FORTRESS_P1.x, y: FORTRESS_P1.y, hp: FORTRESS_HP, maxHp: FORTRESS_HP },
+    2: { player: P2, x: FORTRESS_P2.x, y: FORTRESS_P2.y, hp: FORTRESS_HP, maxHp: FORTRESS_HP },
+};
+var placedCount = { 1: 0, 2: 0 };
+var battleTimer = null;
+var tickInterval = 300;
+var tickCount = 0;
+var countdownValue = 0;
 
 // ---- Helpers ----
-function getUnit(x, y) { return units.find(u => u.x === x && u.y === y && u.hp > 0); }
-function getFortress(x, y) { return fortresses.find(f => f && f.x === x && f.y === y); }
+function getUnit(x, y) {
+    for (var i = 0; i < units.length; i++) {
+        if (units[i].x === x && units[i].y === y && units[i].hp > 0) return units[i];
+    }
+    return null;
+}
+
+function isFortressAt(x, y) {
+    return (fortresses[1].x === x && fortresses[1].y === y) ||
+           (fortresses[2].x === x && fortresses[2].y === y);
+}
+
 function dist(a, b) { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
 
 function isPlacementZone(x, y, player) {
@@ -217,17 +251,16 @@ function draw() {
 }
 
 function drawGrid() {
-    for (let y = 0; y < ROWS; y++) {
-        for (let x = 0; x < COLS; x++) {
-            const px = x * CELL;
-            const py = y * CELL;
+    for (var y = 0; y < ROWS; y++) {
+        for (var x = 0; x < COLS; x++) {
+            var px = x * CELL;
+            var py = y * CELL;
 
-            let bg = '#16162a';
+            var bg = '#18181e';
             if (phase === 'place_p1' && isPlacementZone(x, y, P1)) bg = '#1a2244';
             else if (phase === 'place_p2' && isPlacementZone(x, y, P2)) bg = '#2a1a1a';
             else if (x <= 2) bg = '#141430';
             else if (x >= 7) bg = '#1e1418';
-            else bg = '#18181e';
 
             ctx.fillStyle = bg;
             ctx.fillRect(px, py, CELL, CELL);
@@ -236,6 +269,7 @@ function drawGrid() {
         }
     }
 
+    // Center divider
     ctx.strokeStyle = '#444';
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
@@ -245,47 +279,72 @@ function drawGrid() {
     ctx.setLineDash([]);
 }
 
-function drawFortresses() {
-    for (let i = 1; i <= 2; i++) {
-        const f = fortresses[i];
-        if (!f) continue;
-        const px = f.x * CELL + CELL / 2;
-        const py = f.y * CELL + CELL / 2;
+function drawFortress(f, playerNum) {
+    var px = f.x * CELL + CELL / 2;
+    var py = f.y * CELL + CELL / 2;
 
-        ctx.shadowColor = i === P1 ? '#4488ff' : '#ff4444';
-        ctx.shadowBlur = f.hp > 0 ? 12 : 0;
+    // Glow
+    ctx.shadowColor = playerNum === P1 ? '#4488ff' : '#ff4444';
+    ctx.shadowBlur = f.hp > 0 ? 15 : 0;
 
-        ctx.fillStyle = f.hp > 0 ? (i === P1 ? '#335599' : '#993333') : '#333';
-        ctx.beginPath();
-        ctx.arc(px, py, CELL * 0.4, 0, Math.PI * 2);
-        ctx.fill();
+    // Base circle
+    ctx.fillStyle = f.hp > 0 ? (playerNum === P1 ? '#335599' : '#993333') : '#333';
+    ctx.beginPath();
+    ctx.arc(px, py, CELL * 0.42, 0, Math.PI * 2);
+    ctx.fill();
 
-        ctx.shadowBlur = 0;
+    // Border
+    ctx.strokeStyle = playerNum === P1 ? '#4488ff' : '#ff4444';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.lineWidth = 1;
 
-        ctx.font = '24px serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('🏰', px, py - 2);
+    ctx.shadowBlur = 0;
 
-        if (f.hp > 0) {
-            const bw = CELL * 0.7;
-            const bx = px - bw / 2;
-            const by = py + CELL * 0.32;
-            ctx.fillStyle = '#333';
-            ctx.fillRect(bx, by, bw, 5);
-            ctx.fillStyle = f.hp / f.maxHp > 0.3 ? '#44cc44' : '#ff4444';
-            ctx.fillRect(bx, by, bw * (f.hp / f.maxHp), 5);
-        }
+    // Castle icon
+    ctx.font = '26px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🏰', px, py - 2);
+
+    // Player label
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(playerNum === P1 ? 'P1' : 'P2', px, py - CELL * 0.35);
+
+    // HP bar
+    if (f.hp > 0) {
+        var bw = CELL * 0.7;
+        var bx = px - bw / 2;
+        var by = py + CELL * 0.34;
+        ctx.fillStyle = '#333';
+        ctx.fillRect(bx, by, bw, 6);
+        ctx.fillStyle = f.hp / f.maxHp > 0.3 ? '#44cc44' : '#ff4444';
+        ctx.fillRect(bx, by, bw * (f.hp / f.maxHp), 6);
+        ctx.strokeStyle = '#555';
+        ctx.strokeRect(bx, by, bw, 6);
     }
 }
 
-function drawUnits() {
-    for (const u of units) {
-        if (u.hp <= 0) continue;
-        const px = u.x * CELL + CELL / 2;
-        const py = u.y * CELL + CELL / 2;
-        const type = UNIT_TYPES[u.type];
+function drawFortresses() {
+    drawFortress(fortresses[1], P1);
+    drawFortress(fortresses[2], P2);
+}
 
+function drawUnits() {
+    for (var i = 0; i < units.length; i++) {
+        var u = units[i];
+        if (u.hp <= 0) continue;
+
+        // During placement, only show current player's units
+        if (phase === 'place_p1' && u.player !== P1) continue;
+        if (phase === 'place_p2' && u.player !== P2) continue;
+
+        var px = u.x * CELL + CELL / 2;
+        var py = u.y * CELL + CELL / 2;
+        var type = UNIT_TYPES[u.type];
+
+        // Team color circle
         ctx.fillStyle = u.player === P1 ? 'rgba(68,136,255,0.3)' : 'rgba(255,68,68,0.3)';
         ctx.beginPath();
         ctx.arc(px, py, CELL * 0.38, 0, Math.PI * 2);
@@ -296,20 +355,23 @@ function drawUnits() {
         ctx.stroke();
         ctx.lineWidth = 1;
 
+        // Emoji
         ctx.font = '22px serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(type.emoji, px, py - 2);
 
-        const bw = CELL * 0.6;
-        const bx = px - bw / 2;
-        const by = py + CELL * 0.3;
+        // HP bar
+        var bw = CELL * 0.6;
+        var bx = px - bw / 2;
+        var by = py + CELL * 0.3;
         ctx.fillStyle = '#222';
         ctx.fillRect(bx, by, bw, 4);
-        const hpRatio = u.hp / UNIT_TYPES[u.type].hp;
+        var hpRatio = u.hp / UNIT_TYPES[u.type].hp;
         ctx.fillStyle = hpRatio > 0.5 ? '#44cc44' : hpRatio > 0.25 ? '#ccaa00' : '#ff4444';
         ctx.fillRect(bx, by, bw * hpRatio, 4);
 
+        // Attack flash
         if (u.flashTimer > 0) {
             ctx.fillStyle = 'rgba(255,255,100,' + (u.flashTimer * 0.15) + ')';
             ctx.beginPath();
@@ -320,22 +382,23 @@ function drawUnits() {
     }
 }
 
-let hoverCell = null;
+var hoverCell = null;
 function drawHoverInfo() {
     if (!hoverCell) return;
-    const { x, y } = hoverCell;
+    var x = hoverCell.x;
+    var y = hoverCell.y;
 
     if ((phase === 'place_p1' || phase === 'place_p2') &&
         isPlacementZone(x, y, currentPlayer) &&
-        !getUnit(x, y) && !getFortress(x, y)) {
+        !getUnit(x, y) && !isFortressAt(x, y)) {
         ctx.fillStyle = 'rgba(255,204,0,0.15)';
         ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
     }
 }
 
-// ---- UI Building (safe DOM methods) ----
+// ---- UI Building ----
 function buildUI() {
-    const uiEl = document.getElementById('ui');
+    var uiEl = document.getElementById('ui');
     while (uiEl.firstChild) uiEl.removeChild(uiEl.firstChild);
 
     if (phase !== 'place_p1' && phase !== 'place_p2') {
@@ -344,72 +407,74 @@ function buildUI() {
     }
     uiEl.style.display = 'flex';
 
-    const remaining = MAX_UNITS - placedCount[currentPlayer];
+    var remaining = MAX_UNITS - placedCount[currentPlayer];
 
-    for (const [key, type] of Object.entries(UNIT_TYPES)) {
-        const btn = document.createElement('button');
+    var keys = Object.keys(UNIT_TYPES);
+    for (var i = 0; i < keys.length; i++) {
+        var key = keys[i];
+        var type = UNIT_TYPES[key];
+
+        var btn = document.createElement('button');
         btn.className = 'unit-btn' + (key === selectedType ? ' selected' : '');
 
-        const nameSpan = document.createTextNode(type.emoji + ' ' + type.name);
-        btn.appendChild(nameSpan);
+        var nameText = document.createTextNode(type.emoji + ' ' + type.name);
+        btn.appendChild(nameText);
         btn.appendChild(document.createElement('br'));
 
-        const descSpan = document.createElement('span');
+        var descSpan = document.createElement('span');
         descSpan.style.cssText = 'font-size:0.8rem;color:#aaa;';
         descSpan.textContent = type.desc;
         btn.appendChild(descSpan);
 
-        btn.addEventListener('click', () => { selectedType = key; buildUI(); });
+        (function(k) {
+            btn.addEventListener('click', function() { selectedType = k; buildUI(); });
+        })(key);
         uiEl.appendChild(btn);
     }
 
-    const countEl = document.createElement('div');
+    var countEl = document.createElement('div');
     countEl.style.cssText = 'display:flex;align-items:center;font-size:1rem;color:#ffcc00;';
     countEl.textContent = '残り ' + remaining + ' 体';
     uiEl.appendChild(countEl);
 }
 
 function updateStatus() {
-    const el = document.getElementById('status');
-    const p1hp = document.getElementById('p1-hp');
-    const p2hp = document.getElementById('p2-hp');
-    p1hp.textContent = String(Math.max(0, fortresses[1].hp));
-    p2hp.textContent = String(Math.max(0, fortresses[2].hp));
+    var el = document.getElementById('status');
+    document.getElementById('p1-hp').textContent = String(Math.max(0, Math.ceil(fortresses[1].hp)));
+    document.getElementById('p2-hp').textContent = String(Math.max(0, Math.ceil(fortresses[2].hp)));
 
-    const readyBtn = document.getElementById('btn-ready');
-    const startBtn = document.getElementById('btn-start');
-    const speedCtrl = document.getElementById('speed-control');
+    var readyBtn = document.getElementById('btn-ready');
+    var speedCtrl = document.getElementById('speed-control');
 
     switch (phase) {
         case 'place_p1':
             el.textContent = '🔵 Player 1: キャラを配置してください（残り ' + (MAX_UNITS - placedCount[1]) + ' 体）';
             readyBtn.style.display = '';
             readyBtn.disabled = placedCount[1] === 0;
-            startBtn.style.display = 'none';
             speedCtrl.style.display = 'none';
             break;
         case 'place_p2':
             el.textContent = '🔴 Player 2: キャラを配置してください（残り ' + (MAX_UNITS - placedCount[2]) + ' 体）';
             readyBtn.style.display = '';
             readyBtn.disabled = placedCount[2] === 0;
-            startBtn.style.display = 'none';
             speedCtrl.style.display = 'none';
             break;
-        case 'ready':
-            el.textContent = '両プレイヤー配置完了！バトル開始？';
+        case 'countdown':
+            el.textContent = '⚔️ バトル開始まで... ' + countdownValue;
             readyBtn.style.display = 'none';
-            startBtn.style.display = '';
             speedCtrl.style.display = 'none';
             break;
         case 'battle':
             el.textContent = '⚔️ バトル中！ (ターン ' + tickCount + ')';
             readyBtn.style.display = 'none';
-            startBtn.style.display = 'none';
             speedCtrl.style.display = 'flex';
             break;
         case 'ended':
             readyBtn.style.display = 'none';
-            startBtn.style.display = 'none';
+            speedCtrl.style.display = 'none';
+            break;
+        default:
+            readyBtn.style.display = 'none';
             speedCtrl.style.display = 'none';
             break;
     }
@@ -417,14 +482,14 @@ function updateStatus() {
 
 // ---- Placement ----
 canvas.addEventListener('click', function(e) {
-    const rect = canvas.getBoundingClientRect();
-    const x = Math.floor((e.clientX - rect.left) / CELL);
-    const y = Math.floor((e.clientY - rect.top) / CELL);
+    var rect = canvas.getBoundingClientRect();
+    var x = Math.floor((e.clientX - rect.left) / CELL);
+    var y = Math.floor((e.clientY - rect.top) / CELL);
 
     if (phase !== 'place_p1' && phase !== 'place_p2') return;
     if (placedCount[currentPlayer] >= MAX_UNITS) return;
     if (!isPlacementZone(x, y, currentPlayer)) return;
-    if (getUnit(x, y) || getFortress(x, y)) return;
+    if (getUnit(x, y) || isFortressAt(x, y)) return;
 
     units.push({
         player: currentPlayer,
@@ -442,24 +507,26 @@ canvas.addEventListener('click', function(e) {
 
 canvas.addEventListener('contextmenu', function(e) {
     e.preventDefault();
-    const rect = canvas.getBoundingClientRect();
-    const x = Math.floor((e.clientX - rect.left) / CELL);
-    const y = Math.floor((e.clientY - rect.top) / CELL);
+    var rect = canvas.getBoundingClientRect();
+    var x = Math.floor((e.clientX - rect.left) / CELL);
+    var y = Math.floor((e.clientY - rect.top) / CELL);
 
     if (phase !== 'place_p1' && phase !== 'place_p2') return;
 
-    const idx = units.findIndex(u => u.x === x && u.y === y && u.player === currentPlayer);
-    if (idx >= 0) {
-        units.splice(idx, 1);
-        placedCount[currentPlayer]--;
-        buildUI();
-        updateStatus();
-        draw();
+    for (var i = units.length - 1; i >= 0; i--) {
+        if (units[i].x === x && units[i].y === y && units[i].player === currentPlayer) {
+            units.splice(i, 1);
+            placedCount[currentPlayer]--;
+            buildUI();
+            updateStatus();
+            draw();
+            break;
+        }
     }
 });
 
 canvas.addEventListener('mousemove', function(e) {
-    const rect = canvas.getBoundingClientRect();
+    var rect = canvas.getBoundingClientRect();
     hoverCell = {
         x: Math.floor((e.clientX - rect.left) / CELL),
         y: Math.floor((e.clientY - rect.top) / CELL),
@@ -467,30 +534,59 @@ canvas.addEventListener('mousemove', function(e) {
     if (phase === 'place_p1' || phase === 'place_p2') draw();
 });
 
-// ---- Ready / Start ----
+// ---- Ready button: P1 done → handover → P2 done → countdown → battle ----
 document.getElementById('btn-ready').addEventListener('click', function() {
     if (phase === 'place_p1') {
+        // Show handover screen so P2 doesn't see P1's placement
+        phase = 'handover';
+        document.getElementById('handover-title').textContent = '🔴 Player 2 の番です';
+        document.getElementById('handover-desc').textContent = 'Player 1 は画面を渡してください。Player 2 が準備できたらボタンを押してね！';
+        document.getElementById('handover-overlay').style.display = 'flex';
+        buildUI();
+        updateStatus();
+    } else if (phase === 'place_p2') {
+        // Both done — start countdown
+        phase = 'countdown';
+        buildUI();
+        updateStatus();
+        draw();
+        startCountdown();
+    }
+});
+
+// ---- Handover: P2 presses "ready" ----
+document.getElementById('btn-handover').addEventListener('click', function() {
+    if (phase === 'handover') {
+        document.getElementById('handover-overlay').style.display = 'none';
         phase = 'place_p2';
         currentPlayer = P2;
         selectedType = 'warrior';
         buildUI();
         updateStatus();
         draw();
-    } else if (phase === 'place_p2') {
-        phase = 'ready';
-        buildUI();
-        updateStatus();
-        draw();
     }
 });
 
-document.getElementById('btn-start').addEventListener('click', startBattle);
-document.getElementById('btn-replay').addEventListener('click', resetGame);
-document.getElementById('btn-reset').addEventListener('click', resetGame);
+// ---- Countdown before battle ----
+function startCountdown() {
+    countdownValue = 3;
+    updateStatus();
+    draw();
+
+    var countdownTimer = setInterval(function() {
+        countdownValue--;
+        if (countdownValue <= 0) {
+            clearInterval(countdownTimer);
+            startBattle();
+        } else {
+            updateStatus();
+        }
+    }, 800);
+}
 
 // ---- Speed ----
 document.getElementById('speed').addEventListener('input', function(e) {
-    const v = parseInt(e.target.value);
+    var v = parseInt(e.target.value);
     var speeds = { 1: 600, 2: 400, 3: 300, 4: 150, 5: 80 };
     var labels = { 1: 'x0.5', 2: 'x0.75', 3: 'x1.0', 4: 'x2.0', 5: 'x4.0' };
     tickInterval = speeds[v];
@@ -507,13 +603,17 @@ function startBattle() {
     tickCount = 0;
     buildUI();
     updateStatus();
+    draw();
     battleTimer = setInterval(battleTick, tickInterval);
 }
 
 function battleTick() {
     tickCount++;
 
-    var aliveUnits = units.filter(u => u.hp > 0);
+    var aliveUnits = [];
+    for (var i = 0; i < units.length; i++) {
+        if (units[i].hp > 0) aliveUnits.push(units[i]);
+    }
 
     for (var i = 0; i < aliveUnits.length; i++) {
         var u = aliveUnits[i];
@@ -522,7 +622,7 @@ function battleTick() {
         var type = UNIT_TYPES[u.type];
         var enemyPlayer = u.player === P1 ? P2 : P1;
 
-        // Find nearest target
+        // Find nearest target (enemy unit or enemy fortress)
         var target = null;
         var targetDist = Infinity;
         var targetIsFortress = false;
@@ -557,30 +657,27 @@ function battleTick() {
             var dx = Math.sign(target.x - u.x);
             var dy = Math.sign(target.y - u.y);
 
-            var moves = [];
             var candidates = [
                 { x: u.x + dx, y: u.y },
                 { x: u.x, y: u.y + dy },
                 { x: u.x + dx, y: u.y + dy },
             ];
+            var moved = false;
             for (var k = 0; k < candidates.length; k++) {
                 var m = candidates[k];
                 if (m.x >= 0 && m.x < COLS && m.y >= 0 && m.y < ROWS &&
-                    !getUnit(m.x, m.y) && !getFortress(m.x, m.y)) {
-                    moves.push(m);
+                    !getUnit(m.x, m.y) && !isFortressAt(m.x, m.y)) {
+                    u.x = m.x;
+                    u.y = m.y;
+                    moved = true;
+                    break;
                 }
             }
 
-            if (moves.length > 0) {
-                u.x = moves[0].x;
-                u.y = moves[0].y;
-            }
-
-            // Fast units move again
-            if (type.speed >= 2 && moves.length > 0) {
+            // Fast units get second move
+            if (type.speed >= 2 && moved) {
                 var dx2 = Math.sign(target.x - u.x);
                 var dy2 = Math.sign(target.y - u.y);
-                var moves2 = [];
                 var cands2 = [
                     { x: u.x + dx2, y: u.y },
                     { x: u.x, y: u.y + dy2 },
@@ -588,13 +685,11 @@ function battleTick() {
                 for (var k2 = 0; k2 < cands2.length; k2++) {
                     var m2 = cands2[k2];
                     if (m2.x >= 0 && m2.x < COLS && m2.y >= 0 && m2.y < ROWS &&
-                        !getUnit(m2.x, m2.y) && !getFortress(m2.x, m2.y)) {
-                        moves2.push(m2);
+                        !getUnit(m2.x, m2.y) && !isFortressAt(m2.x, m2.y)) {
+                        u.x = m2.x;
+                        u.y = m2.y;
+                        break;
                     }
-                }
-                if (moves2.length > 0) {
-                    u.x = moves2[0].x;
-                    u.y = moves2[0].y;
                 }
             }
 
@@ -603,11 +698,19 @@ function battleTick() {
     }
 
     // Remove dead units
-    units = units.filter(u => u.hp > 0);
+    var alive = [];
+    for (var i = 0; i < units.length; i++) {
+        if (units[i].hp > 0) alive.push(units[i]);
+    }
+    units = alive;
 
-    // Check if all units of one side are dead
-    var p1alive = units.some(u => u.player === P1);
-    var p2alive = units.some(u => u.player === P2);
+    // If all units on both sides dead, compare fortress HP
+    var p1alive = false;
+    var p2alive = false;
+    for (var i = 0; i < units.length; i++) {
+        if (units[i].player === P1) p1alive = true;
+        if (units[i].player === P2) p2alive = true;
+    }
     if (!p1alive && !p2alive) {
         if (fortresses[1].hp > fortresses[2].hp) endGame(P1);
         else if (fortresses[2].hp > fortresses[1].hp) endGame(P2);
@@ -641,6 +744,10 @@ function endGame(winner) {
     draw();
 }
 
+// ---- Reset ----
+document.getElementById('btn-replay').addEventListener('click', resetGame);
+document.getElementById('btn-reset').addEventListener('click', resetGame);
+
 function resetGame() {
     clearInterval(battleTimer);
     battleTimer = null;
@@ -653,6 +760,7 @@ function resetGame() {
     fortresses[1].hp = FORTRESS_HP;
     fortresses[2].hp = FORTRESS_HP;
     document.getElementById('result-overlay').style.display = 'none';
+    document.getElementById('handover-overlay').style.display = 'none';
     buildUI();
     updateStatus();
     draw();
