@@ -52,14 +52,21 @@
         .dev-btn { padding: 6px 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem; margin: 2px; }
         #dev-toggle { position: fixed; bottom: 8px; right: 8px; z-index: 201; background: #333; color: #aaa; border: 1px solid #555; border-radius: 6px; padding: 4px 10px; font-size: 0.7rem; cursor: pointer; }
         /* Turn log */
-        #turn-log { display: none; position: fixed; top: 0; left: 0; bottom: 0; width: 280px; background: #1a1a2e; border-right: 2px solid #444; z-index: 200; overflow-y: auto; padding: 12px; font-size: 0.75rem; }
+        #turn-log { display: none; position: fixed; top: 0; left: 0; bottom: 0; width: 320px; background: #1a1a2e; border-right: 2px solid #444; z-index: 200; overflow-y: auto; padding: 12px; font-size: 0.75rem; }
         #turn-log h3 { margin-bottom: 8px; color: #ffcc00; }
-        .log-entry { margin-bottom: 4px; padding: 3px 6px; border-radius: 4px; }
+        .log-entry { margin-bottom: 4px; padding: 3px 6px; border-radius: 4px; font-family: monospace; }
         .log-entry.attack { background: rgba(255,100,100,0.1); }
         .log-entry.move { background: rgba(100,200,255,0.1); }
         .log-entry.splash { background: rgba(200,100,255,0.1); }
         .log-entry.death { background: rgba(255,200,0,0.15); color: #ffcc00; }
         .log-entry.fortress { background: rgba(255,50,50,0.2); color: #ff6666; }
+        .log-unit { margin-bottom: 2px; padding: 2px 6px; font-family: monospace; color: #bbb; }
+        .log-section { margin: 8px 0 4px; color: #88aaff; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 2px; }
+        .log-copy-btn { width: 100%; padding: 8px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: bold; margin-bottom: 8px; }
+        .log-copy-btn.copy-turn { background: #2a5a2a; color: #8f8; }
+        .log-copy-btn.copy-all { background: #2a2a5a; color: #88f; }
+        .log-copy-btn:hover { filter: brightness(1.3); }
+        .log-copy-btn.copied { background: #444; color: #fff; }
         #log-toggle { position: fixed; bottom: 8px; left: 8px; z-index: 201; background: #333; color: #aaa; border: 1px solid #555; border-radius: 6px; padding: 4px 10px; font-size: 0.7rem; cursor: pointer; }
     </style>
 </head>
@@ -648,7 +655,7 @@ function drawBattle() {
 }
 
 // ============================================================
-// TURN LOG
+// TURN LOG + DEBUG COPY
 // ============================================================
 var logOpen = false;
 document.getElementById('log-toggle').addEventListener('click', function() {
@@ -656,14 +663,139 @@ document.getElementById('log-toggle').addEventListener('click', function() {
     document.getElementById('turn-log').style.display = logOpen ? 'block' : 'none';
     if (logOpen && simHistory.length > 0) updateLog(playTurn);
 });
+
+function unitLabel(id, snap) {
+    if (!snap) return '#' + id;
+    for (var i = 0; i < snap.units.length; i++) {
+        var u = snap.units[i];
+        if (u.id === id) return '#' + id + '(P' + u.player + ' ' + UNIT_TYPES[u.type].name + ')';
+    }
+    return '#' + id;
+}
+
+function formatEvent(ev, snap) {
+    if (ev.type === 'move') return unitLabel(ev.unitId, snap) + ' 移動 (' + ev.from.x + ',' + ev.from.y + ')→(' + ev.to.x + ',' + ev.to.y + ')';
+    if (ev.type === 'attack') {
+        var tgt = ev.toFort !== undefined ? 'Fort P' + ev.toFort : unitLabel(ev.to, snap);
+        return unitLabel(ev.from, snap) + ' → ' + tgt + ' ' + ev.dmg + 'dmg';
+    }
+    if (ev.type === 'splash') return '  splash → ' + unitLabel(ev.to, snap) + ' ' + ev.dmg + 'dmg';
+    if (ev.type === 'death') return '  DEAD ' + unitLabel(ev.unitId, snap);
+    if (ev.type === 'fortress_destroyed') return '  FORTRESS P' + ev.player + ' DESTROYED';
+    return JSON.stringify(ev);
+}
+
+function buildPlacementText() {
+    var lines = ['=== 配置 ==='];
+    for (var p = 1; p <= 2; p++) {
+        lines.push('P' + p + ':');
+        for (var i = 0; i < placementUnits.length; i++) {
+            var u = placementUnits[i];
+            if (u.player !== p) continue;
+            lines.push('  #' + i + ' ' + UNIT_TYPES[u.type].name + ' (' + u.x + ',' + u.y + ')');
+        }
+    }
+    lines.push('Fort P1:(' + FORT_P1.x + ',' + FORT_P1.y + ') HP=' + FORTRESS_HP);
+    lines.push('Fort P2:(' + FORT_P2.x + ',' + FORT_P2.y + ') HP=' + FORTRESS_HP);
+    return lines.join('\n');
+}
+
+function buildTurnText(t) {
+    var snap = simHistory[t];
+    if (!snap) return 'ターン ' + t + ': データなし';
+    var prevSnap = t > 0 ? simHistory[t - 1] : null;
+    var lines = ['--- ターン ' + t + ' ---'];
+    // Unit status at this turn
+    lines.push('[ユニット状態]');
+    for (var i = 0; i < snap.units.length; i++) {
+        var u = snap.units[i];
+        lines.push('  #' + u.id + ' P' + u.player + ' ' + UNIT_TYPES[u.type].name + ' (' + u.x + ',' + u.y + ') HP=' + u.hp + ' CD=' + u.cd);
+    }
+    lines.push('[拠点] P1:HP=' + snap.forts[1].hp + ' P2:HP=' + snap.forts[2].hp);
+    // Events
+    if (snap.events && snap.events.length > 0) {
+        lines.push('[イベント]');
+        for (var i = 0; i < snap.events.length; i++) {
+            lines.push('  ' + formatEvent(snap.events[i], prevSnap || snap));
+        }
+    } else {
+        lines.push(t === 0 ? '[初期配置]' : '[イベントなし]');
+    }
+    return lines.join('\n');
+}
+
+function buildFullDebugText() {
+    var parts = [buildPlacementText(), ''];
+    for (var t = 0; t < simHistory.length; t++) {
+        parts.push(buildTurnText(t));
+    }
+    if (winner === 0) parts.push('\n結果: 引き分け');
+    else parts.push('\n結果: P' + winner + ' 勝利 (ターン ' + (simHistory.length - 1) + ')');
+    return parts.join('\n');
+}
+
+function copyToClipboard(text, btn) {
+    navigator.clipboard.writeText(text).then(function() {
+        var orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(function() { btn.textContent = orig; btn.classList.remove('copied'); }, 1200);
+    });
+}
+
 function updateLog(t) {
     if (!logOpen) return;
     var panel = document.getElementById('turn-log');
     while (panel.firstChild) panel.removeChild(panel.firstChild);
+
     var title = document.createElement('h3');
-    title.textContent = '📋 ターン ' + t + ' ログ';
+    title.textContent = '📋 ターン ' + t + ' / ' + (simHistory.length - 1);
     panel.appendChild(title);
+
+    // Copy current turn button
+    var copyTurnBtn = document.createElement('button');
+    copyTurnBtn.className = 'log-copy-btn copy-turn';
+    copyTurnBtn.textContent = '📋 このターンをコピー';
+    copyTurnBtn.addEventListener('click', function() {
+        copyToClipboard(buildPlacementText() + '\n\n' + buildTurnText(t), copyTurnBtn);
+    });
+    panel.appendChild(copyTurnBtn);
+
+    // Copy all button
+    var copyAllBtn = document.createElement('button');
+    copyAllBtn.className = 'log-copy-btn copy-all';
+    copyAllBtn.textContent = '📋 全ターンをコピー';
+    copyAllBtn.addEventListener('click', function() {
+        copyToClipboard(buildFullDebugText(), copyAllBtn);
+    });
+    panel.appendChild(copyAllBtn);
+
+    // Unit status section
     var snap = simHistory[t];
+    if (snap) {
+        var secUnits = document.createElement('div');
+        secUnits.className = 'log-section';
+        secUnits.textContent = 'ユニット状態';
+        panel.appendChild(secUnits);
+        for (var i = 0; i < snap.units.length; i++) {
+            var u = snap.units[i];
+            var ud = document.createElement('div');
+            ud.className = 'log-unit';
+            ud.style.color = u.player === P1 ? '#6af' : '#f66';
+            ud.textContent = '#' + u.id + ' ' + UNIT_TYPES[u.type].name + ' (' + u.x + ',' + u.y + ') HP=' + u.hp + ' CD=' + u.cd;
+            panel.appendChild(ud);
+        }
+        var fortDiv = document.createElement('div');
+        fortDiv.className = 'log-unit';
+        fortDiv.textContent = '拠点 P1:HP=' + snap.forts[1].hp + ' P2:HP=' + snap.forts[2].hp;
+        panel.appendChild(fortDiv);
+    }
+
+    // Events section
+    var secEv = document.createElement('div');
+    secEv.className = 'log-section';
+    secEv.textContent = 'イベント';
+    panel.appendChild(secEv);
     if (!snap || !snap.events || snap.events.length === 0) {
         var empty = document.createElement('div');
         empty.style.color = '#666';
@@ -671,24 +803,12 @@ function updateLog(t) {
         panel.appendChild(empty);
         return;
     }
+    var prevSnap = t > 0 ? simHistory[t - 1] : null;
     for (var i = 0; i < snap.events.length; i++) {
         var ev = snap.events[i];
         var div = document.createElement('div');
         div.className = 'log-entry ' + ev.type;
-        var text = '';
-        if (ev.type === 'move') {
-            text = '#' + ev.unitId + ' 移動 (' + ev.from.x + ',' + ev.from.y + ')→(' + ev.to.x + ',' + ev.to.y + ')';
-        } else if (ev.type === 'attack') {
-            var tgt = ev.toFort !== undefined ? 'Fort P' + ev.toFort : '#' + ev.to;
-            text = '#' + ev.from + ' → ' + tgt + ' (' + ev.dmg + 'dmg)';
-        } else if (ev.type === 'splash') {
-            text = '💥 splash #' + ev.to + ' (' + ev.dmg + 'dmg)';
-        } else if (ev.type === 'death') {
-            text = '💀 #' + ev.unitId + ' 撃破';
-        } else if (ev.type === 'fortress_destroyed') {
-            text = '🏰💥 P' + ev.player + ' 拠点壊滅！';
-        }
-        div.textContent = text;
+        div.textContent = formatEvent(ev, prevSnap || snap);
         panel.appendChild(div);
     }
 }
