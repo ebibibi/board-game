@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Fortress Clash — オリジナルボードゲーム</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -16,57 +16,72 @@
             align-items: center;
             min-height: 100vh;
             overflow-x: hidden;
+            padding: 8px;
         }
 
         h1 {
-            margin: 16px 0 4px;
-            font-size: 1.6rem;
+            margin: 8px 0 2px;
+            font-size: 1.3rem;
             letter-spacing: 2px;
         }
 
         #status {
-            font-size: 1rem;
-            margin-bottom: 8px;
+            font-size: 0.9rem;
+            margin-bottom: 6px;
             color: #aaa;
-            min-height: 1.4em;
+            min-height: 1.2em;
+            text-align: center;
+        }
+
+        #board-container {
+            width: 100%;
+            max-width: 640px;
+            position: relative;
         }
 
         canvas {
+            width: 100%;
+            height: auto;
             border: 2px solid #333;
             border-radius: 8px;
             cursor: pointer;
+            display: block;
+            touch-action: none;
         }
 
         #ui {
             display: flex;
-            gap: 16px;
-            margin: 12px 0;
+            gap: 8px;
+            margin: 8px 0;
             flex-wrap: wrap;
             justify-content: center;
+            max-width: 640px;
         }
 
         .unit-btn {
-            padding: 10px 16px;
+            padding: 8px 12px;
             border: 2px solid #555;
             border-radius: 8px;
             background: #1a1a2e;
             color: #eee;
-            font-size: 1rem;
+            font-size: 0.85rem;
             cursor: pointer;
             transition: all 0.15s;
             user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
         .unit-btn:hover { border-color: #888; background: #252540; }
         .unit-btn.selected { border-color: #ffcc00; background: #2a2a45; }
 
         .action-btn {
-            padding: 10px 24px;
+            padding: 10px 20px;
             border: none;
             border-radius: 8px;
-            font-size: 1rem;
+            font-size: 0.95rem;
             cursor: pointer;
             font-weight: bold;
             transition: all 0.15s;
+            -webkit-tap-highlight-color: transparent;
         }
         .action-btn:hover { filter: brightness(1.2); }
         .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -77,18 +92,20 @@
         #controls {
             display: flex;
             gap: 12px;
-            margin: 8px 0 16px;
+            margin: 6px 0 12px;
             flex-wrap: wrap;
             justify-content: center;
         }
 
         #info {
             display: flex;
-            gap: 32px;
-            font-size: 0.95rem;
-            margin-bottom: 8px;
+            gap: 16px;
+            font-size: 0.85rem;
+            margin-bottom: 6px;
+            flex-wrap: wrap;
+            justify-content: center;
         }
-        .player-info { padding: 6px 16px; border-radius: 6px; }
+        .player-info { padding: 4px 12px; border-radius: 6px; }
         .p1-info { background: rgba(68, 136, 255, 0.2); border: 1px solid #4488ff; }
         .p2-info { background: rgba(255, 68, 68, 0.2); border: 1px solid #ff4444; }
 
@@ -102,7 +119,6 @@
         }
         #speed-control input { width: 100px; }
 
-        /* Handover overlay — blocks screen between players */
         #handover-overlay {
             display: none;
             position: fixed;
@@ -113,9 +129,11 @@
             z-index: 90;
             flex-direction: column;
             gap: 20px;
+            padding: 20px;
+            text-align: center;
         }
-        #handover-overlay h2 { font-size: 2rem; }
-        #handover-overlay p { font-size: 1.1rem; color: #aaa; }
+        #handover-overlay h2 { font-size: 1.6rem; }
+        #handover-overlay p { font-size: 1rem; color: #aaa; }
 
         #result-overlay {
             display: none;
@@ -125,16 +143,24 @@
             justify-content: center;
             align-items: center;
             z-index: 100;
+            padding: 20px;
         }
         #result-box {
             background: #1a1a2e;
             border: 2px solid #ffcc00;
             border-radius: 16px;
-            padding: 40px 60px;
+            padding: 30px 40px;
             text-align: center;
         }
-        #result-box h2 { font-size: 2rem; margin-bottom: 12px; }
-        #result-box p { font-size: 1.1rem; color: #aaa; margin-bottom: 20px; }
+        #result-box h2 { font-size: 1.6rem; margin-bottom: 12px; }
+        #result-box p { font-size: 1rem; color: #aaa; margin-bottom: 20px; }
+
+        #remove-hint {
+            font-size: 0.75rem;
+            color: #666;
+            margin-top: 2px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -147,10 +173,11 @@
     </div>
 
     <div id="board-container">
-        <canvas id="canvas" width="640" height="512"></canvas>
+        <canvas id="canvas"></canvas>
     </div>
 
     <div id="ui"></div>
+    <div id="remove-hint"></div>
     <div id="controls">
         <button class="action-btn" id="btn-ready">配置完了 ✓</button>
         <button class="action-btn" id="btn-reset">リセット 🔄</button>
@@ -161,11 +188,10 @@
         <span id="speed-label">x1.0</span>
     </div>
 
-    <!-- Handover screen between P1 and P2 -->
     <div id="handover-overlay">
         <h2 id="handover-title"></h2>
         <p id="handover-desc"></p>
-        <button class="action-btn" id="btn-handover" style="background:#ffcc00;color:#000;font-size:1.2rem;padding:14px 40px;">準備OK</button>
+        <button class="action-btn" id="btn-handover" style="background:#ffcc00;color:#000;font-size:1.1rem;padding:14px 36px;">準備OK</button>
     </div>
 
     <div id="result-overlay">
@@ -178,7 +204,7 @@
 
 <script>
 // ============================================================
-// Fortress Clash — Browser Board Game
+// Fortress Clash — Responsive Browser Board Game
 // ============================================================
 
 var canvas = document.getElementById('canvas');
@@ -186,9 +212,11 @@ var ctx = canvas.getContext('2d');
 
 var COLS = 10;
 var ROWS = 8;
-var CELL = 64;
-canvas.width = COLS * CELL;
-canvas.height = ROWS * CELL;
+var CELL = 64; // internal resolution cell size
+var CANVAS_W = COLS * CELL;
+var CANVAS_H = ROWS * CELL;
+canvas.width = CANVAS_W;
+canvas.height = CANVAS_H;
 
 var P1 = 1;
 var P2 = 2;
@@ -202,12 +230,12 @@ var UNIT_TYPES = {
 var MAX_UNITS = 5;
 var FORTRESS_HP = 20;
 
-// P1 fortress: left side center, P2 fortress: right side center
-var FORTRESS_P1 = { x: 0, y: 3 };
-var FORTRESS_P2 = { x: 9, y: 4 };
+// Fortresses at center of each side
+var FORTRESS_P1 = { x: 0, y: 4 };
+var FORTRESS_P2 = { x: 9, y: 3 };
 
 // ---- Game State ----
-var phase = 'place_p1'; // place_p1, handover, place_p2, countdown, battle, ended
+var phase = 'place_p1';
 var currentPlayer = P1;
 var selectedType = 'warrior';
 var units = [];
@@ -241,13 +269,22 @@ function isPlacementZone(x, y, player) {
     return x >= 7 && x <= 9;
 }
 
+// Convert screen coordinates to grid coordinates (handles CSS scaling)
+function screenToGrid(clientX, clientY) {
+    var rect = canvas.getBoundingClientRect();
+    var scaleX = CANVAS_W / rect.width;
+    var scaleY = CANVAS_H / rect.height;
+    var x = Math.floor((clientX - rect.left) * scaleX / CELL);
+    var y = Math.floor((clientY - rect.top) * scaleY / CELL);
+    return { x: x, y: y };
+}
+
 // ---- Drawing ----
 function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
     drawGrid();
     drawFortresses();
     drawUnits();
-    drawHoverInfo();
 }
 
 function drawGrid() {
@@ -283,17 +320,14 @@ function drawFortress(f, playerNum) {
     var px = f.x * CELL + CELL / 2;
     var py = f.y * CELL + CELL / 2;
 
-    // Glow
     ctx.shadowColor = playerNum === P1 ? '#4488ff' : '#ff4444';
     ctx.shadowBlur = f.hp > 0 ? 15 : 0;
 
-    // Base circle
     ctx.fillStyle = f.hp > 0 ? (playerNum === P1 ? '#335599' : '#993333') : '#333';
     ctx.beginPath();
     ctx.arc(px, py, CELL * 0.42, 0, Math.PI * 2);
     ctx.fill();
 
-    // Border
     ctx.strokeStyle = playerNum === P1 ? '#4488ff' : '#ff4444';
     ctx.lineWidth = 3;
     ctx.stroke();
@@ -301,18 +335,15 @@ function drawFortress(f, playerNum) {
 
     ctx.shadowBlur = 0;
 
-    // Castle icon
     ctx.font = '26px serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('🏰', px, py - 2);
 
-    // Player label
-    ctx.font = 'bold 10px sans-serif';
+    ctx.font = 'bold 11px sans-serif';
     ctx.fillStyle = '#fff';
     ctx.fillText(playerNum === P1 ? 'P1' : 'P2', px, py - CELL * 0.35);
 
-    // HP bar
     if (f.hp > 0) {
         var bw = CELL * 0.7;
         var bx = px - bw / 2;
@@ -344,7 +375,6 @@ function drawUnits() {
         var py = u.y * CELL + CELL / 2;
         var type = UNIT_TYPES[u.type];
 
-        // Team color circle
         ctx.fillStyle = u.player === P1 ? 'rgba(68,136,255,0.3)' : 'rgba(255,68,68,0.3)';
         ctx.beginPath();
         ctx.arc(px, py, CELL * 0.38, 0, Math.PI * 2);
@@ -355,13 +385,11 @@ function drawUnits() {
         ctx.stroke();
         ctx.lineWidth = 1;
 
-        // Emoji
         ctx.font = '22px serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(type.emoji, px, py - 2);
 
-        // HP bar
         var bw = CELL * 0.6;
         var bx = px - bw / 2;
         var by = py + CELL * 0.3;
@@ -371,7 +399,6 @@ function drawUnits() {
         ctx.fillStyle = hpRatio > 0.5 ? '#44cc44' : hpRatio > 0.25 ? '#ccaa00' : '#ff4444';
         ctx.fillRect(bx, by, bw * hpRatio, 4);
 
-        // Attack flash
         if (u.flashTimer > 0) {
             ctx.fillStyle = 'rgba(255,255,100,' + (u.flashTimer * 0.15) + ')';
             ctx.beginPath();
@@ -382,27 +409,16 @@ function drawUnits() {
     }
 }
 
-var hoverCell = null;
-function drawHoverInfo() {
-    if (!hoverCell) return;
-    var x = hoverCell.x;
-    var y = hoverCell.y;
-
-    if ((phase === 'place_p1' || phase === 'place_p2') &&
-        isPlacementZone(x, y, currentPlayer) &&
-        !getUnit(x, y) && !isFortressAt(x, y)) {
-        ctx.fillStyle = 'rgba(255,204,0,0.15)';
-        ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
-    }
-}
-
 // ---- UI Building ----
 function buildUI() {
     var uiEl = document.getElementById('ui');
     while (uiEl.firstChild) uiEl.removeChild(uiEl.firstChild);
 
+    var hintEl = document.getElementById('remove-hint');
+
     if (phase !== 'place_p1' && phase !== 'place_p2') {
         uiEl.style.display = 'none';
+        hintEl.textContent = '';
         return;
     }
     uiEl.style.display = 'flex';
@@ -422,7 +438,7 @@ function buildUI() {
         btn.appendChild(document.createElement('br'));
 
         var descSpan = document.createElement('span');
-        descSpan.style.cssText = 'font-size:0.8rem;color:#aaa;';
+        descSpan.style.cssText = 'font-size:0.75rem;color:#aaa;';
         descSpan.textContent = type.desc;
         btn.appendChild(descSpan);
 
@@ -436,6 +452,8 @@ function buildUI() {
     countEl.style.cssText = 'display:flex;align-items:center;font-size:1rem;color:#ffcc00;';
     countEl.textContent = '残り ' + remaining + ' 体';
     uiEl.appendChild(countEl);
+
+    hintEl.textContent = '配置済みキャラをタップで削除';
 }
 
 function updateStatus() {
@@ -448,13 +466,13 @@ function updateStatus() {
 
     switch (phase) {
         case 'place_p1':
-            el.textContent = '🔵 Player 1: キャラを配置してください（残り ' + (MAX_UNITS - placedCount[1]) + ' 体）';
+            el.textContent = '🔵 P1: 自陣にキャラを配置（残り ' + (MAX_UNITS - placedCount[1]) + ' 体）';
             readyBtn.style.display = '';
             readyBtn.disabled = placedCount[1] === 0;
             speedCtrl.style.display = 'none';
             break;
         case 'place_p2':
-            el.textContent = '🔴 Player 2: キャラを配置してください（残り ' + (MAX_UNITS - placedCount[2]) + ' 体）';
+            el.textContent = '🔴 P2: 自陣にキャラを配置（残り ' + (MAX_UNITS - placedCount[2]) + ' 体）';
             readyBtn.style.display = '';
             readyBtn.disabled = placedCount[2] === 0;
             speedCtrl.style.display = 'none';
@@ -480,13 +498,29 @@ function updateStatus() {
     }
 }
 
-// ---- Placement ----
-canvas.addEventListener('click', function(e) {
-    var rect = canvas.getBoundingClientRect();
-    var x = Math.floor((e.clientX - rect.left) / CELL);
-    var y = Math.floor((e.clientY - rect.top) / CELL);
+// ---- Placement (mouse + touch) ----
+function handlePlace(clientX, clientY) {
+    var pos = screenToGrid(clientX, clientY);
+    var x = pos.x;
+    var y = pos.y;
 
     if (phase !== 'place_p1' && phase !== 'place_p2') return;
+
+    // If tapping on own unit, remove it
+    var existingUnit = getUnit(x, y);
+    if (existingUnit && existingUnit.player === currentPlayer) {
+        for (var i = units.length - 1; i >= 0; i--) {
+            if (units[i].x === x && units[i].y === y && units[i].player === currentPlayer) {
+                units.splice(i, 1);
+                placedCount[currentPlayer]--;
+                buildUI();
+                updateStatus();
+                draw();
+                return;
+            }
+        }
+    }
+
     if (placedCount[currentPlayer] >= MAX_UNITS) return;
     if (!isPlacementZone(x, y, currentPlayer)) return;
     if (getUnit(x, y) || isFortressAt(x, y)) return;
@@ -503,49 +537,32 @@ canvas.addEventListener('click', function(e) {
     buildUI();
     updateStatus();
     draw();
+}
+
+canvas.addEventListener('click', function(e) {
+    handlePlace(e.clientX, e.clientY);
 });
+
+canvas.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    var touch = e.touches[0];
+    handlePlace(touch.clientX, touch.clientY);
+}, { passive: false });
 
 canvas.addEventListener('contextmenu', function(e) {
     e.preventDefault();
-    var rect = canvas.getBoundingClientRect();
-    var x = Math.floor((e.clientX - rect.left) / CELL);
-    var y = Math.floor((e.clientY - rect.top) / CELL);
-
-    if (phase !== 'place_p1' && phase !== 'place_p2') return;
-
-    for (var i = units.length - 1; i >= 0; i--) {
-        if (units[i].x === x && units[i].y === y && units[i].player === currentPlayer) {
-            units.splice(i, 1);
-            placedCount[currentPlayer]--;
-            buildUI();
-            updateStatus();
-            draw();
-            break;
-        }
-    }
 });
 
-canvas.addEventListener('mousemove', function(e) {
-    var rect = canvas.getBoundingClientRect();
-    hoverCell = {
-        x: Math.floor((e.clientX - rect.left) / CELL),
-        y: Math.floor((e.clientY - rect.top) / CELL),
-    };
-    if (phase === 'place_p1' || phase === 'place_p2') draw();
-});
-
-// ---- Ready button: P1 done → handover → P2 done → countdown → battle ----
+// ---- Ready button ----
 document.getElementById('btn-ready').addEventListener('click', function() {
     if (phase === 'place_p1') {
-        // Show handover screen so P2 doesn't see P1's placement
         phase = 'handover';
         document.getElementById('handover-title').textContent = '🔴 Player 2 の番です';
-        document.getElementById('handover-desc').textContent = 'Player 1 は画面を渡してください。Player 2 が準備できたらボタンを押してね！';
+        document.getElementById('handover-desc').textContent = 'Player 1 は画面を渡してください。\nPlayer 2 が準備できたらボタンを押してね！';
         document.getElementById('handover-overlay').style.display = 'flex';
         buildUI();
         updateStatus();
     } else if (phase === 'place_p2') {
-        // Both done — start countdown
         phase = 'countdown';
         buildUI();
         updateStatus();
@@ -554,7 +571,7 @@ document.getElementById('btn-ready').addEventListener('click', function() {
     }
 });
 
-// ---- Handover: P2 presses "ready" ----
+// ---- Handover ----
 document.getElementById('btn-handover').addEventListener('click', function() {
     if (phase === 'handover') {
         document.getElementById('handover-overlay').style.display = 'none';
@@ -567,7 +584,7 @@ document.getElementById('btn-handover').addEventListener('click', function() {
     }
 });
 
-// ---- Countdown before battle ----
+// ---- Countdown ----
 function startCountdown() {
     countdownValue = 3;
     updateStatus();
@@ -622,7 +639,6 @@ function battleTick() {
         var type = UNIT_TYPES[u.type];
         var enemyPlayer = u.player === P1 ? P2 : P1;
 
-        // Find nearest target (enemy unit or enemy fortress)
         var target = null;
         var targetDist = Infinity;
         var targetIsFortress = false;
@@ -643,7 +659,6 @@ function battleTick() {
         if (!target) continue;
 
         if (targetDist <= type.range) {
-            // Attack
             target.hp -= type.atk;
             u.cooldown = Math.max(1, 3 - type.speed);
             u.flashTimer = 3;
@@ -653,7 +668,6 @@ function battleTick() {
                 return;
             }
         } else {
-            // Move toward target
             var dx = Math.sign(target.x - u.x);
             var dy = Math.sign(target.y - u.y);
 
@@ -674,7 +688,6 @@ function battleTick() {
                 }
             }
 
-            // Fast units get second move
             if (type.speed >= 2 && moved) {
                 var dx2 = Math.sign(target.x - u.x);
                 var dy2 = Math.sign(target.y - u.y);
@@ -697,14 +710,12 @@ function battleTick() {
         }
     }
 
-    // Remove dead units
     var alive = [];
     for (var i = 0; i < units.length; i++) {
         if (units[i].hp > 0) alive.push(units[i]);
     }
     units = alive;
 
-    // If all units on both sides dead, compare fortress HP
     var p1alive = false;
     var p2alive = false;
     for (var i = 0; i < units.length; i++) {
