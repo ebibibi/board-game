@@ -455,27 +455,109 @@ function initPlayback(hist, win) {
     startAnimLoop();
 }
 
+// Pending combat effects — applied after movement animation completes
+var pendingCombat = null; // { snap, prevSnap, applied }
+
 function syncDisplayToTurn(t) {
     var snap = simHistory[t];
-    displayForts[1].hp = snap.forts[1].hp;
-    displayForts[2].hp = snap.forts[2].hp;
-    // Build display units — preserve vx/vy if same id exists
+    var prevSnap = t > 0 ? simHistory[t - 1] : null;
+
+    // Build old visual position map
     var oldMap = {};
     for (var i = 0; i < displayUnits.length; i++) oldMap[displayUnits[i].id] = displayUnits[i];
+
+    // Map of units alive in this snapshot
+    var snapIdSet = {};
+    for (var i = 0; i < snap.units.length; i++) snapIdSet[snap.units[i].id] = true;
+
     displayUnits = [];
+
+    // Add surviving units (target pos = post-move, visual pos = old)
     for (var i = 0; i < snap.units.length; i++) {
         var su = snap.units[i];
         var old = oldMap[su.id];
+        // Show pre-combat HP during move phase; finalHp applied after combat
+        var preHp = su.hp;
+        if (prevSnap) {
+            for (var j = 0; j < prevSnap.units.length; j++) {
+                if (prevSnap.units[j].id === su.id) { preHp = prevSnap.units[j].hp; break; }
+            }
+        }
         displayUnits.push({
             id: su.id, player: su.player, type: su.type,
             x: su.x, y: su.y,
             vx: old ? old.vx : su.x, vy: old ? old.vy : su.y,
-            hp: su.hp, maxHp: UNIT_TYPES[su.type].hp,
-            flash: 0, damagePopup: 0, lastDamage: 0,
+            hp: preHp, finalHp: su.hp, maxHp: UNIT_TYPES[su.type].hp,
+            flash: 0, damagePopup: 0, lastDamage: 0, dying: false,
         });
     }
-    // Spawn projectiles for attack events
+
+    // Add units that died this turn (in prevSnap but not in snap)
+    if (prevSnap) {
+        for (var i = 0; i < prevSnap.units.length; i++) {
+            var pu = prevSnap.units[i];
+            if (snapIdSet[pu.id]) continue;
+            // Find post-move position from move events
+            var dx = pu.x, dy = pu.y;
+            if (snap.events) {
+                for (var j = 0; j < snap.events.length; j++) {
+                    var ev = snap.events[j];
+                    if (ev.type === 'move' && ev.unitId === pu.id) { dx = ev.to.x; dy = ev.to.y; }
+                }
+            }
+            var old = oldMap[pu.id];
+            displayUnits.push({
+                id: pu.id, player: pu.player, type: pu.type,
+                x: dx, y: dy,
+                vx: old ? old.vx : dx, vy: old ? old.vy : dy,
+                hp: pu.hp, finalHp: 0, maxHp: UNIT_TYPES[pu.type].hp,
+                flash: 0, damagePopup: 0, lastDamage: 0, dying: true,
+            });
+        }
+    }
+
+    // Fort HP: show previous during move phase
+    if (prevSnap) {
+        displayForts[1].hp = prevSnap.forts[1].hp;
+        displayForts[2].hp = prevSnap.forts[2].hp;
+    } else {
+        displayForts[1].hp = snap.forts[1].hp;
+        displayForts[2].hp = snap.forts[2].hp;
+    }
+    document.getElementById('p1-hp').textContent = String(Math.max(0, Math.ceil(displayForts[1].hp)));
+    document.getElementById('p2-hp').textContent = String(Math.max(0, Math.ceil(displayForts[2].hp)));
+
+    // Defer combat effects
     projectiles = [];
+    pendingCombat = { snap: snap, applied: false };
+
+    // If no movement this turn, apply combat immediately
+    var hasMove = false;
+    if (snap.events) {
+        for (var i = 0; i < snap.events.length; i++) {
+            if (snap.events[i].type === 'move') { hasMove = true; break; }
+        }
+    }
+    if (!hasMove) applyCombatEffects();
+}
+
+function applyCombatEffects() {
+    if (!pendingCombat || pendingCombat.applied) return;
+    pendingCombat.applied = true;
+    var snap = pendingCombat.snap;
+
+    // Update HP to final values
+    for (var i = 0; i < displayUnits.length; i++) {
+        displayUnits[i].hp = displayUnits[i].finalHp;
+    }
+
+    // Update fort HP
+    displayForts[1].hp = snap.forts[1].hp;
+    displayForts[2].hp = snap.forts[2].hp;
+    document.getElementById('p1-hp').textContent = String(Math.max(0, Math.ceil(snap.forts[1].hp)));
+    document.getElementById('p2-hp').textContent = String(Math.max(0, Math.ceil(snap.forts[2].hp)));
+
+    // Spawn projectiles and flashes
     if (snap.events) {
         for (var i = 0; i < snap.events.length; i++) {
             var ev = snap.events[i];
@@ -484,34 +566,38 @@ function syncDisplayToTurn(t) {
                 var d = Math.sqrt(Math.pow(ev.tx - ev.fx, 2) + Math.pow(ev.ty - ev.fy, 2));
                 projectiles.push({ sx: ev.fx, sy: ev.fy, tx: ev.tx, ty: ev.ty, progress: 0, color: color, size: ev.unitType === 'mage' ? 5 : 3, dist: Math.max(1, d) });
             }
-            // Flash on attacked units
             if (ev.type === 'attack') {
                 for (var j = 0; j < displayUnits.length; j++) {
-                    if (ev.to !== undefined && displayUnits[j].id === ev.to) { displayUnits[j].flash = 20; displayUnits[j].damagePopup = 30; displayUnits[j].lastDamage = ev.dmg; }
+                    if (ev.to !== undefined && displayUnits[j].id === ev.to) {
+                        displayUnits[j].flash = 20; displayUnits[j].damagePopup = 30; displayUnits[j].lastDamage = ev.dmg;
+                    }
                 }
             }
             if (ev.type === 'splash') {
                 for (var j = 0; j < displayUnits.length; j++) {
-                    if (displayUnits[j].id === ev.to) { displayUnits[j].flash = 15; displayUnits[j].damagePopup = 30; displayUnits[j].lastDamage = ev.dmg; }
+                    if (displayUnits[j].id === ev.to) {
+                        displayUnits[j].flash = 15; displayUnits[j].damagePopup = 30; displayUnits[j].lastDamage = ev.dmg;
+                    }
                 }
             }
         }
     }
-    document.getElementById('p1-hp').textContent = String(Math.max(0, Math.ceil(displayForts[1].hp)));
-    document.getElementById('p2-hp').textContent = String(Math.max(0, Math.ceil(displayForts[2].hp)));
+
+    // Remove dying units after a short visual delay (handled in animFrame)
 }
 
 function jumpToTurn(t) {
     t = Math.max(0, Math.min(t, simHistory.length - 1));
-    // For jump (not step), snap positions instantly
+    // For jump (not step), snap positions instantly — no phased animation
     var snap = simHistory[t];
     displayUnits = [];
     for (var i = 0; i < snap.units.length; i++) {
         var su = snap.units[i];
-        displayUnits.push({ id: su.id, player: su.player, type: su.type, x: su.x, y: su.y, vx: su.x, vy: su.y, hp: su.hp, maxHp: UNIT_TYPES[su.type].hp, flash: 0, damagePopup: 0, lastDamage: 0 });
+        displayUnits.push({ id: su.id, player: su.player, type: su.type, x: su.x, y: su.y, vx: su.x, vy: su.y, hp: su.hp, finalHp: su.hp, maxHp: UNIT_TYPES[su.type].hp, flash: 0, damagePopup: 0, lastDamage: 0, dying: false });
     }
     displayForts[1].hp = snap.forts[1].hp; displayForts[2].hp = snap.forts[2].hp;
     projectiles = [];
+    pendingCombat = null;
     playTurn = t;
     document.getElementById('seek-bar').value = String(t);
     updateTurnLabel();
@@ -586,14 +672,28 @@ function animFrame(ts) {
     var dt = Math.min((ts - lastFrameTime) / 1000, 0.1);
     lastFrameTime = ts;
     var any = false;
+    var allArrived = true;
     for (var i = 0; i < displayUnits.length; i++) {
         var u = displayUnits[i];
         var step = MOVE_SPEED * dt;
         if (Math.abs(u.x - u.vx) > 0.005 || Math.abs(u.y - u.vy) > 0.005) {
-            u.vx = moveToward(u.vx, u.x, step); u.vy = moveToward(u.vy, u.y, step); any = true;
+            u.vx = moveToward(u.vx, u.x, step); u.vy = moveToward(u.vy, u.y, step);
+            any = true; allArrived = false;
         } else { u.vx = u.x; u.vy = u.y; }
         if (u.flash > 0) { u.flash = Math.max(0, u.flash - dt * 30); any = true; }
         if (u.damagePopup > 0) { u.damagePopup = Math.max(0, u.damagePopup - dt * 25); any = true; }
+    }
+    // Movement done → trigger combat effects
+    if (allArrived && pendingCombat && !pendingCombat.applied) {
+        applyCombatEffects();
+        any = true;
+    }
+    // Remove dead units after their death animation (flash/popup done)
+    for (var i = displayUnits.length - 1; i >= 0; i--) {
+        var u = displayUnits[i];
+        if (u.dying && u.hp <= 0 && u.flash <= 0 && u.damagePopup <= 0) {
+            displayUnits.splice(i, 1);
+        }
     }
     for (var i = projectiles.length - 1; i >= 0; i--) {
         projectiles[i].progress += PROJ_SPEED * dt / Math.max(1, projectiles[i].dist);
@@ -904,7 +1004,7 @@ document.getElementById('btn-replay').addEventListener('click', function() {
     document.getElementById('playback').style.display = 'none';
     stopPlay(); animRunning = false;
     phase = 'place_p1'; currentPlayer = P1; selectedType = 'warrior';
-    placementUnits = []; placedCount = { 1: 0, 2: 0 }; simHistory = []; projectiles = []; displayUnits = [];
+    placementUnits = []; placedCount = { 1: 0, 2: 0 }; simHistory = []; projectiles = []; displayUnits = []; pendingCombat = null;
     buildUI(); updateStatus(); drawPlacement();
 });
 
